@@ -1,0 +1,17 @@
+{
+  "name": "clube-vkudaka",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Clube de Assinaturas VKUDAKA — app mobile (React Native) + CRM web + API Node/PostgreSQL",
+  "workspaces": ["backend", "crm-web", "mobile"],
+  "scripts": {
+    "check:scope": "node scripts/check-legacy-copy.mjs",
+    "dev:api": "npm run dev -w backend",
+    "dev:crm": "npm run dev -w crm-web",
+    "dev:app": "npm run start -w mobile",
+    "db:migrate": "npm run db:migrate -w backend",
+    "db:seed": "npm run db:seed -w backend",
+    "test": "npm run check:scope && npm run test -w backend"
+  },
+  "engines": { "node": ">=20" }
+}

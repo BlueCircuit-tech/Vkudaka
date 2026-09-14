@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c9a05e">
+<title>Clube VKUDAKA — sua melhor versão</title>
+<meta name="description" content="Protótipo do app do Clube VKUDAKA: planos Essence e Signature, créditos mensais, aluguel de looks, abatimento acumulativo na mensalidade, convites para o Fashion Week VKUDAKA e comunidade.">
+<link rel="icon" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
+<style>
+/* ======================================================================
+   CLUBE VKUDAKA — sua melhor versão
+   Protótipo navegável. Arquivo único, sem build, sem dependências.
+
+   ── IDENTIDADE ───────────────────────────────────────────────────────
+   A referência é a logo: círculo dourado sobre preto, tipografia serifada
+   com brilho de metal. O app é escuro por decisão — não há tema claro.
+   Ouro é reservado para o que é da marca e do privilégio (plano, convite,
+   benefício). Texto corrido fica em marfim, nunca em ouro, para manter
+   contraste e não banalizar a cor.
+
+   ── O QUE ESTE PROTÓTIPO DEFENDE ─────────────────────────────────────
+   Fidelidade aqui não é pontinho de cashback: é assinatura. Então a home
+   abre com o CARTÃO DO CLUBE (plano, créditos, look do trimestre) e a
+   mensalidade com o abatimento acumulado já aplicado — o número que faz
+   a cliente sentir que o clube se paga.
+
+   Fluxos funcionais: trocar de plano, usar créditos (extrato), reservar
+   o look do trimestre, confirmar presença no Fashion Week, interagir na
+   comunidade. Tudo simulado em memória.
+   ====================================================================== */
+:root{
+  color-scheme:dark;
+
+  --preto:#0c0a07;            /* fundo do palco, como o fundo da logo */
+  --carvao:#14110c;           /* papel dos cartões */
+  --carvao-2:#1c1812;         /* superfícies elevadas */
+  --fio:#2b2418;              /* linhas */
+  --fio-ouro:rgba(212,169,78,.35);
+
+  --ouro:#d4a94e;             /* ouro base */
+  --ouro-claro:#f3d98d;       /* alto brilho do gradiente */
+  --ouro-escuro:#8f6a26;      /* sombra do metal */
+  --ouro-fundo:rgba(212,169,78,.10);
+
+  --marfim:#f2ead9;           /* texto principal */
+  --marfim-2:#b7ac97;         /* texto secundário */
+  --marfim-3:#7d7462;         /* texto terciário */
+
+  --bom:#7fbf7f; --bom-fundo:rgba(70,160,70,.14);
+  --alerta:#e9c46a;
+  --critico:#e07a7a; --critico-fundo:rgba(200,80,80,.14);
+
+  --grad-ouro:linear-gradient(120deg,#8f6a26 0%,#d4a94e 30%,#f3d98d 50%,#d4a94e 70%,#8f6a26 100%);
+
+  --serif:"Didot","Bodoni 72","Playfair Display","Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --raio:16px;
+}
+
+*{box-sizing:border-box; margin:0}
+html,body{height:100%}
+body{background:var(--preto); color:var(--marfim); font-family:var(--sans);
+     font-size:15.5px; line-height:1.55; -webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit; color:inherit}
+button{cursor:pointer; background:none; border:0; padding:0}
+::selection{background:rgba(212,169,78,.35)}
+
+h1,h2,h3,.serif{font-family:var(--serif); font-weight:500; letter-spacing:.02em}
+
+/* ====================== MOLDURA ====================================== */
+.palco{min-height:100dvh; display:grid; place-items:center}
+.fone{width:100%; max-width:432px; background:var(--preto); min-height:100dvh;
+      display:flex; flex-direction:column; position:relative; overflow:hidden}
+/* moldura de iPhone (só no desktop; no celular o app ocupa a tela real) */
+.iphone{position:relative; width:100%; max-width:432px}
+.lat,.ilha,.statusbar,.indicador{display:none}
+@media (min-width:900px){
+  .palco{padding:34px;
+    background:radial-gradient(60% 50% at 50% 0%, rgba(212,169,78,.10), transparent 70%), #060504}
+  .fone{min-height:min(902px, calc(100dvh - 68px)); max-height:902px; border-radius:56px;
+        box-shadow:0 70px 130px -35px rgba(0,0,0,.95),
+          0 0 0 7px #050505,                 /* bezel da tela */
+          0 0 0 12px #2c2922,                /* corpo titânio */
+          0 0 0 13px rgba(212,169,78,.45),   /* fio dourado da borda */
+          0 0 0 14px #0a0906}
+  /* botões físicos */
+  .lat{display:block; position:absolute; background:linear-gradient(90deg,#3a362e,#211e18); z-index:1}
+  .lat.esq{left:-17px; width:4px; border-radius:3px 0 0 3px}
+  .lat.dir{right:-17px; width:4px; border-radius:0 3px 3px 0}
+  .lat.silencio{top:150px; height:28px}
+  .lat.vol-mais{top:206px; height:52px}
+  .lat.vol-menos{top:268px; height:52px}
+  .lat.acao{top:210px; height:78px}
+  /* dynamic island */
+  .ilha{display:block; position:absolute; top:14px; left:50%; transform:translateX(-50%);
+        width:112px; height:31px; border-radius:18px; background:#000; z-index:70}
+  .ilha::after{content:""; position:absolute; right:11px; top:50%; transform:translateY(-50%);
+        width:11px; height:11px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #2a2f3a, #0b0d12 65%)}
+  /* barra de status iOS */
+  .statusbar{display:flex; flex:none; align-items:center; justify-content:space-between;
+        height:54px; padding:14px 32px 0; font-size:15px; font-weight:600; letter-spacing:.02em; z-index:60}
+  .statusbar svg{display:block}
+  /* traço do home */
+  .indicador{display:block; position:absolute; bottom:9px; left:50%; transform:translateX(-50%);
+        width:134px; height:5px; border-radius:5px; background:rgba(242,234,217,.4); z-index:65; pointer-events:none}
+  .navbar{padding-bottom:28px}
+}
+
+/* ====================== SPLASH DE ABERTURA ========================== */
+#boot{position:absolute; inset:0; z-index:80; display:grid; place-content:center; gap:30px; text-align:center;
+  background:radial-gradient(70% 45% at 50% 42%, rgba(212,169,78,.13), transparent 70%), var(--preto);
+  transition:opacity .75s ease}
+#boot.sai{opacity:0; pointer-events:none}
+#boot .anel-wrap{position:relative; width:186px; height:186px; margin:0 auto}
+#boot .anel-gira{position:absolute; inset:0; border-radius:50%;
+  background:conic-gradient(from 0deg, transparent 0 18%, #8f6a26 32%, #f3d98d 50%, #8f6a26 68%, transparent 82% 100%);
+  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+          mask:radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+  animation:gira 2.4s linear infinite}
+#boot .anel-txt{position:absolute; inset:0; display:grid; place-content:center; gap:4px}
+#boot .marca{font-family:var(--serif); font-size:37px; letter-spacing:.05em; animation:aparece 1.1s ease both}
+#boot .sub{font-size:9.5px; letter-spacing:.4em; text-transform:uppercase; color:var(--ouro); animation:aparece 1.1s .35s ease both}
+#boot .frase{font-size:13px; letter-spacing:.28em; text-transform:uppercase; color:var(--marfim-3); animation:aparece 1.1s .7s ease both}
+@keyframes gira{to{transform:rotate(360deg)}}
+@keyframes aparece{from{opacity:0; transform:translateY(10px)}}
+@media (prefers-reduced-motion:reduce){
+  #boot .anel-gira{animation:none;
+    background:conic-gradient(from 210deg,#8f6a26,#f3d98d 25%,#d4a94e 45%,#7a5a20 60%,#f3d98d 80%,#8f6a26)}
+  #boot .marca,#boot .sub,#boot .frase{animation:none}
+}
+.tela{flex:1; overflow-y:auto; overscroll-behavior:contain; padding-bottom:96px; display:none}
+.tela.ativa{display:block}
+
+/* ====================== TIPOS DE BLOCO =============================== */
+.topo{position:sticky; top:0; z-index:20; background:linear-gradient(var(--preto) 78%, transparent);
+      display:flex; align-items:center; gap:12px; padding:16px 20px 12px; min-height:60px}
+.topo h1{font-size:21px; letter-spacing:.04em}
+.volta{width:38px; height:38px; border-radius:50%; border:1px solid var(--fio);
+       display:grid; place-items:center; color:var(--marfim-2); flex:none; background:var(--carvao)}
+.volta:active{background:var(--carvao-2)}
+
+.bloco{margin:0 20px 16px; background:var(--carvao); border:1px solid var(--fio); border-radius:var(--raio); padding:18px}
+.bloco.ouro{border-color:var(--fio-ouro); background:
+  linear-gradient(160deg, rgba(212,169,78,.10), rgba(212,169,78,.02) 45%), var(--carvao)}
+
+.rotulo{font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--ouro); font-weight:600}
+.mudo{color:var(--marfim-2); font-size:14px}
+.mudo3{color:var(--marfim-3); font-size:12.5px}
+.fio-h{border:0; border-top:1px solid var(--fio); margin:14px 0}
+
+.chip{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+      padding:4px 12px; border-radius:999px; border:1px solid var(--fio-ouro); color:var(--ouro); background:var(--ouro-fundo)}
+.chip.ok{border-color:rgba(127,191,127,.4); color:var(--bom); background:var(--bom-fundo)}
+.chip.neutro{border-color:var(--fio); color:var(--marfim-2); background:var(--carvao-2)}
+
+.btn{display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+     min-height:50px; border-radius:13px; font-weight:600; letter-spacing:.06em; font-size:14.5px;
+     background:var(--grad-ouro); color:#1a1206; text-transform:uppercase}
+.btn:active{filter:brightness(.92)}
+.btn.fantasma{background:none; border:1px solid var(--fio-ouro); color:var(--ouro); text-transform:none; letter-spacing:.02em}
+.btn.fantasma:active{background:var(--ouro-fundo)}
+.btn[disabled]{filter:grayscale(.7) brightness(.6); pointer-events:none}
+.btn-lin{color:var(--ouro); font-weight:600; font-size:14px}
+
+/* texto com efeito de ouro, para títulos de marca */
+.texto-ouro{background:var(--grad-ouro); -webkit-background-clip:text; background-clip:text; color:transparent}
+
+/* ====================== LOGO (redesenhada em vetor) ================== */
+.selo{display:grid; place-items:center; text-align:center}
+.selo .anel{width:150px; height:150px; border-radius:50%; display:grid; place-items:center; padding:10px;
+  background:conic-gradient(from 210deg,#8f6a26,#f3d98d 25%,#d4a94e 45%,#7a5a20 60%,#f3d98d 80%,#8f6a26);
+  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+          mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px))}
+.selo .marca{font-family:var(--serif); font-size:34px; letter-spacing:.06em}
+.selo .sub{font-size:10px; letter-spacing:.42em; text-transform:uppercase; color:var(--ouro); margin-top:4px}
+
+/* ====================== HOME ======================================== */
+.saudacao{padding:22px 20px 6px; display:flex; align-items:center; gap:14px}
+.saudacao .selo-mini{width:46px; height:46px; border-radius:50%; flex:none; display:grid; place-items:center;
+  border:1.5px solid var(--ouro); font-family:var(--serif); font-size:15px; color:var(--ouro); letter-spacing:.05em}
+.saudacao h1{font-size:23px; font-weight:400}
+.saudacao .mudo3{margin-top:-2px}
+
+.cartao{margin:14px 20px 16px; border-radius:20px; padding:22px 20px 18px; position:relative; overflow:hidden;
+  background:linear-gradient(150deg,#221b10 0%,#171208 55%,#241d0f 100%);
+  border:1px solid var(--fio-ouro); box-shadow:0 24px 50px -24px rgba(0,0,0,.8)}
+.cartao::before{content:""; position:absolute; inset:-60% -20% auto; height:150%;
+  background:radial-gradient(45% 45% at 70% 40%, rgba(243,217,141,.16), transparent 70%); pointer-events:none}
+.cartao .linha1{display:flex; justify-content:space-between; align-items:baseline}
+.cartao .nome-marca{font-family:var(--serif); font-size:19px; letter-spacing:.1em}
+.cartao .titular{margin-top:22px; font-size:16.5px; letter-spacing:.08em}
+.cartao .desde{font-size:11.5px; color:var(--marfim-3); letter-spacing:.14em; text-transform:uppercase}
+.cartao .metricas{display:flex; gap:0; margin-top:18px; border-top:1px solid rgba(212,169,78,.2); padding-top:14px}
+.cartao .metricas > button{flex:1; text-align:left; padding-right:10px}
+.cartao .metricas > button + button{border-left:1px solid rgba(212,169,78,.2); padding-left:14px}
+.cartao .m-num{font-family:var(--serif); font-size:21px; color:var(--ouro-claro)}
+.cartao .m-leg{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--marfim-3)}
+
+.grade-acoes{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 20px 16px}
+.acao{background:var(--carvao); border:1px solid var(--fio); border-radius:var(--raio);
+      padding:16px 14px; text-align:left; display:grid; gap:8px}
+.acao:active{background:var(--carvao-2)}
+.acao .ico{width:34px; height:34px; border-radius:10px; display:grid; place-items:center;
+           background:var(--ouro-fundo); border:1px solid var(--fio-ouro); color:var(--ouro)}
+.acao b{font-size:14.5px; font-weight:600; letter-spacing:.02em}
+.acao span{font-size:12px; color:var(--marfim-3); line-height:1.4}
+
+.mensalidade{display:flex; justify-content:space-between; align-items:center; gap:10px}
+.mensalidade .valor{font-family:var(--serif); font-size:27px; color:var(--ouro-claro)}
+.riscado{text-decoration:line-through; color:var(--marfim-3); font-size:14px; font-family:var(--sans)}
+
+/* ====================== LISTAS ====================================== */
+.item-lista{display:flex; gap:14px; align-items:center; padding:14px 0; border-top:1px solid var(--fio)}
+.item-lista:first-of-type{border-top:0; padding-top:4px}
+.item-lista .ico{width:38px; height:38px; border-radius:50%; flex:none; display:grid; place-items:center;
+  border:1px solid var(--fio-ouro); color:var(--ouro); background:var(--ouro-fundo)}
+.item-lista .txt{flex:1; min-width:0}
+.item-lista b{font-weight:600; font-size:14.5px; display:block}
+.item-lista .mudo3{line-height:1.4}
+.item-lista .dir{text-align:right; flex:none}
+.item-lista .dir b{font-family:var(--serif); font-size:16px}
+.cred-mais{color:var(--bom)} .cred-menos{color:var(--marfim)}
+
+/* ====================== PLANOS ====================================== */
+.plano-carta{margin:0 20px 16px; border-radius:20px; border:1px solid var(--fio); background:var(--carvao);
+  padding:22px 20px; position:relative}
+.plano-carta.atual{border-color:var(--fio-ouro);
+  background:linear-gradient(160deg, rgba(212,169,78,.12), rgba(212,169,78,.02) 50%), var(--carvao)}
+.plano-carta .cab{display:flex; justify-content:space-between; align-items:start}
+.plano-carta h3{font-size:25px}
+.plano-carta .preco{font-family:var(--serif); font-size:25px; color:var(--ouro-claro)}
+.plano-carta .preco small{font-family:var(--sans); font-size:12px; color:var(--marfim-3)}
+.plano-carta ul{list-style:none; margin:14px 0 18px; display:grid; gap:9px}
+.plano-carta li{display:flex; gap:10px; font-size:14px; color:var(--marfim-2)}
+.plano-carta li::before{content:"·"; color:var(--ouro); font-weight:900; font-size:18px; line-height:1}
+.plano-carta li b{color:var(--marfim); font-weight:600}
+
+/* ====================== LOOKS ======================================= */
+.faixa-beneficio{margin:0 20px 16px; padding:14px 16px; border-radius:var(--raio);
+  border:1px solid var(--fio-ouro); background:var(--ouro-fundo);
+  display:flex; align-items:center; gap:12px; font-size:13.5px}
+.faixa-beneficio b{color:var(--ouro-claro)}
+.grade-looks{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:0 20px 16px}
+.look{border-radius:var(--raio); overflow:hidden; border:1px solid var(--fio); background:var(--carvao); text-align:left; display:grid}
+.look:active{border-color:var(--fio-ouro)}
+.look .foto{aspect-ratio:3/4; position:relative; overflow:hidden}
+.look .foto img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block}
+.look .foto .num{position:absolute; left:9px; bottom:9px; z-index:1; font-size:9.5px; letter-spacing:.24em;
+  color:var(--ouro-claro); text-transform:uppercase; background:rgba(12,10,7,.6);
+  padding:4px 10px; border-radius:99px; backdrop-filter:blur(4px); border:1px solid rgba(212,169,78,.3)}
+.look .info{padding:12px 12px 14px}
+.look .info b{font-size:14px; display:block; font-weight:600}
+.look .info span{font-size:12px; color:var(--marfim-3)}
+.f1{background:linear-gradient(160deg,#3a2c17,#191006)}
+.f2{background:linear-gradient(160deg,#2c2331,#140f18)}
+.f3{background:linear-gradient(160deg,#173028,#0a1511)}
+.f4{background:linear-gradient(160deg,#33161a,#150a0c)}
+.f5{background:linear-gradient(160deg,#20293a,#0d111a)}
+.f6{background:linear-gradient(160deg,#3a3524,#16130a)}
+.foto-grande{margin:0 20px 16px; border-radius:20px; border:1px solid var(--fio-ouro); aspect-ratio:4/4.4;
+  position:relative; overflow:hidden}
+.foto-grande img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:top; display:block}
+.foto-grande .num{position:absolute; left:14px; bottom:14px; z-index:1; font-size:10.5px; letter-spacing:.3em;
+  color:var(--ouro-claro); text-transform:uppercase; background:rgba(12,10,7,.6);
+  padding:6px 14px; border-radius:99px; backdrop-filter:blur(4px); border:1px solid rgba(212,169,78,.3)}
+.tams{display:flex; gap:10px; margin-top:10px}
+.tam{width:46px; height:46px; border-radius:12px; border:1px solid var(--fio); display:grid; place-items:center; font-weight:600; color:var(--marfim-2)}
+.tam.sel{border-color:var(--ouro); color:var(--ouro); background:var(--ouro-fundo)}
+
+/* ====================== EVENTOS ===================================== */
+.evento{margin:0 20px 16px; border-radius:20px; overflow:hidden; border:1px solid var(--fio); background:var(--carvao)}
+.evento.destaque{border-color:var(--fio-ouro)}
+.evento .capa{padding:26px 20px 20px; position:relative}
+.evento.destaque .capa{background:
+  radial-gradient(80% 90% at 85% 0%, rgba(212,169,78,.22), transparent 60%),
+  linear-gradient(150deg,#221b10,#120e07)}
+.evento:not(.destaque) .capa{background:linear-gradient(150deg,#1c1812,#120f0a); padding-bottom:16px}
+.evento .data-selo{position:absolute; top:18px; right:18px; text-align:center; border:1px solid var(--fio-ouro);
+  border-radius:12px; padding:7px 12px; background:rgba(12,10,7,.55); backdrop-filter:blur(4px)}
+.evento .data-selo b{font-family:var(--serif); font-size:20px; display:block; color:var(--ouro-claro); line-height:1.1}
+.evento .data-selo span{font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--marfim-2)}
+.evento h3{font-size:24px; line-height:1.2; max-width:75%}
+.evento .corpo{padding:16px 20px 18px; display:grid; gap:12px}
+.evento .meta{display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--marfim-2)}
+
+/* ====================== COMUNIDADE ================================== */
+.post{margin:0 20px 14px; background:var(--carvao); border:1px solid var(--fio); border-radius:var(--raio); padding:16px}
+.post .cab{display:flex; gap:12px; align-items:center; margin-bottom:10px}
+.avatar{width:40px; height:40px; border-radius:50%; flex:none; display:grid; place-items:center;
+  font-family:var(--serif); font-size:15px; color:var(--ouro);
+  border:1px solid var(--fio-ouro); background:var(--ouro-fundo); letter-spacing:.03em}
+.post .cab b{font-size:14.5px; display:block}
+.post p{font-size:14.5px; color:var(--marfim-2); line-height:1.55}
+.post .pé{display:flex; gap:20px; margin-top:12px; padding-top:10px; border-top:1px solid var(--fio)}
+.post .pé button{display:flex; gap:7px; align-items:center; color:var(--marfim-3); font-size:13px; font-weight:600}
+.post .pé button.curtido{color:var(--ouro)}
+.compor{margin:0 20px 16px; display:flex; gap:10px; align-items:center}
+.compor input{flex:1; min-height:48px; border-radius:999px; border:1px solid var(--fio); background:var(--carvao);
+  padding:0 18px; font-size:14px; outline:none}
+.compor input::placeholder{color:var(--marfim-3)}
+.compor input:focus{border-color:var(--fio-ouro)}
+.compor .enviar{width:48px; height:48px; border-radius:50%; flex:none; background:var(--grad-ouro); color:#1a1206; display:grid; place-items:center}
+
+/* ====================== FOTOS REAIS ================================= */
+.evento .capa{min-height:150px; display:flex; flex-direction:column; justify-content:flex-end}
+.evento.destaque .capa{min-height:205px}
+.evento .capa img.fundo{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
+.evento .capa .scrim{position:absolute; inset:0;
+  background:linear-gradient(168deg, rgba(12,10,7,.42), rgba(12,10,7,.9) 78%)}
+.evento.destaque .capa .scrim{background:
+  radial-gradient(80% 90% at 85% 0%, rgba(212,169,78,.26), transparent 60%),
+  linear-gradient(168deg, rgba(12,10,7,.5), rgba(12,10,7,.92) 78%)}
+.evento .capa .rotulo, .evento .capa h3{position:relative; z-index:1}
+.evento .data-selo{z-index:2}
+.avatar{overflow:hidden}
+.avatar img{width:100%; height:100%; object-fit:cover; display:block}
+.post .post-foto{display:block; width:100%; aspect-ratio:4/3; object-fit:cover;
+  border-radius:12px; margin-top:12px; border:1px solid var(--fio)}
+.thumb{width:46px; height:46px; border-radius:12px; object-fit:cover; flex:none; border:1px solid var(--fio-ouro)}
+.hero-foto{margin:0 20px 16px; border-radius:20px; overflow:hidden; border:1px solid var(--fio); aspect-ratio:16/8}
+.hero-foto img{width:100%; height:100%; object-fit:cover; display:block}
+.look .info .preco{color:var(--ouro-claro); font-weight:600; font-size:13px; display:block; margin-top:3px}
+
+/* ====================== NAV ========================================= */
+.navbar{position:absolute; left:0; right:0; bottom:0; z-index:30;
+  background:linear-gradient(transparent, var(--preto) 26%);
+  padding:18px 14px calc(14px + env(safe-area-inset-bottom))}
+.navbar .caixa{display:flex; background:rgba(28,24,18,.92); border:1px solid var(--fio-ouro);
+  border-radius:999px; padding:6px; backdrop-filter:blur(10px)}
+.navbar button{flex:1; display:grid; place-items:center; gap:3px; padding:8px 0 7px; border-radius:999px; color:var(--marfim-3)}
+.navbar button span{font-size:10px; letter-spacing:.06em; font-weight:600}
+.navbar button.ativa{color:#1a1206; background:var(--grad-ouro)}
+.navbar svg{width:21px; height:21px}
+
+/* ====================== FICHA (modal) =============================== */
+.veu{position:absolute; inset:0; z-index:40; background:rgba(6,5,3,.7); backdrop-filter:blur(3px);
+  display:none; align-items:flex-end}
+.veu.aberto{display:flex}
+.ficha{width:100%; background:var(--carvao-2); border-radius:24px 24px 0 0; border-top:1px solid var(--fio-ouro);
+  padding:14px 22px calc(26px + env(safe-area-inset-bottom)); animation:sobe .28s cubic-bezier(.2,.9,.3,1)}
+@keyframes sobe{from{transform:translateY(40px); opacity:0}}
+.ficha .alca{width:44px; height:4px; border-radius:4px; background:var(--fio); margin:0 auto 18px}
+.ficha h3{font-size:22px; margin-bottom:6px}
+.linha-resumo{display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--fio); font-size:14px}
+.linha-resumo span{color:var(--marfim-2)}
+.linha-resumo b{font-weight:600}
+
+/* ====================== TOAST ======================================= */
+.toast{position:absolute; left:20px; right:20px; bottom:104px; z-index:60;
+  background:var(--carvao-2); border:1px solid var(--fio-ouro); color:var(--marfim);
+  border-radius:14px; padding:14px 18px; font-size:14px; display:flex; gap:10px; align-items:center;
+  box-shadow:0 18px 40px -12px rgba(0,0,0,.8); opacity:0; transform:translateY(12px); pointer-events:none;
+  transition:opacity .25s, transform .25s}
+.toast.mostra{opacity:1; transform:none}
+.toast svg{color:var(--ouro); flex:none}
+
+/* barra de progresso do abatimento */
+.trilho{height:7px; border-radius:99px; background:var(--carvao-2); border:1px solid var(--fio); overflow:hidden; margin:10px 0 6px}
+.trilho i{display:block; height:100%; background:var(--grad-ouro); border-radius:99px}
+
+/* ======================================================================
+   MESCLA COM O SITE VKUDAKA.COM.BR
+   O site usa dourado-caramelo sólido com texto branco e superfícies
+   creme. Aqui esse caramelo entra como cor de marca aplicada (barras de
+   título, cartão do clube, botões, chips) sobre a base escura do app.
+   ====================================================================== */
+:root{
+  --ouro:#c9a05e; --ouro-claro:#ecd3a0; --ouro-escuro:#95713a;
+  --fio-ouro:rgba(201,160,94,.42); --ouro-fundo:rgba(201,160,94,.12);
+  --creme:#f6ecd9;
+  --grad-ouro:linear-gradient(120deg,#95713a 0%,#c9a05e 30%,#ecd3a0 50%,#c9a05e 70%,#95713a 100%);
+  --grad-caramelo:linear-gradient(170deg,#d3ab6b,#b8904d);
+}
+.topo{background:var(--grad-caramelo); border-bottom:1px solid rgba(255,255,255,.16)}
+.topo h1{color:#fff}
+.volta{border-color:rgba(255,255,255,.4); color:#fff; background:rgba(255,255,255,.14)}
+.volta:active{background:rgba(255,255,255,.26)}
+.btn{background:var(--grad-caramelo); color:#fff}
+.chip{background:var(--grad-caramelo); color:#fff; border-color:rgba(255,255,255,.28)}
+.navbar button.ativa{background:var(--grad-caramelo); color:#fff}
+.compor input{background:#fff; border-color:#fff; color:#40331c}
+.compor input::placeholder{color:#a5906a}
+.compor input:focus{border-color:var(--ouro)}
+.compor .enviar{background:var(--grad-caramelo); color:#fff}
+.faixa-beneficio{background:var(--creme); border-color:#d9bd8c; color:#5c4a26}
+.faixa-beneficio b{color:#8a6426}
+.cartao{background:var(--grad-caramelo); border-color:rgba(255,255,255,.3)}
+.cartao::before{background:radial-gradient(45% 45% at 70% 40%, rgba(255,255,255,.2), transparent 70%)}
+.cartao .rotulo{color:rgba(255,255,255,.92)}
+.cartao .nome-marca.texto-ouro{background:#fff; -webkit-background-clip:text; background-clip:text}
+.cartao .titular{color:#fff}
+.cartao .desde{color:rgba(255,255,255,.75)}
+.cartao .metricas{border-top-color:rgba(255,255,255,.35)}
+.cartao .metricas > button + button{border-left-color:rgba(255,255,255,.35)}
+.cartao .m-num{color:#fff}
+.cartao .m-leg{color:rgba(255,255,255,.78)}
+
+/* ======================================================================
+   INTERFACE CLARA
+   Base branca/creme como o site: página em off-white quente, cartões
+   brancos, texto marrom-escuro. O caramelo segue como cor de marca.
+   Véus escuros permanecem apenas sobre fotos, onde o texto é branco.
+   ====================================================================== */
+:root{
+  color-scheme:light;
+  --preto:#faf6ee;            /* fundo da página, off-white quente */
+  --carvao:#ffffff;           /* cartões */
+  --carvao-2:#f5edde;         /* superfícies elevadas */
+  --fio:#eae1cd;
+  --marfim:#2e2618; --marfim-2:#6b5c42; --marfim-3:#9d8d6e;
+  --bom:#2f8f2f; --bom-fundo:rgba(60,150,60,.12);
+  --critico:#c04545; --critico-fundo:rgba(200,80,80,.1);
+  --ouro-texto:#8a6426;       /* caramelo escurecido para texto sobre claro */
+  --sombra:0 1px 2px rgba(90,70,40,.06), 0 10px 28px -14px rgba(90,70,40,.22);
+}
+@media (min-width:900px){
+  .palco{background:radial-gradient(60% 50% at 50% 0%, rgba(201,160,94,.2), transparent 70%), #efe6d3}
+}
+.rotulo{color:#9c7238}
+.btn-lin{color:#9c7238}
+.mensalidade .valor{color:var(--ouro-texto)}
+.plano-carta .preco{color:var(--ouro-texto)}
+.look .info .preco{color:var(--ouro-texto)}
+.indicador{background:rgba(0,0,0,.32)}
+.navbar .caixa{background:rgba(255,255,255,.95); border-color:rgba(201,160,94,.55);
+  box-shadow:0 14px 34px -18px rgba(90,70,40,.4)}
+.compor input{border:1px solid var(--fio)}
+.evento .capa h3{color:#fff}
+.evento .capa .rotulo{color:var(--ouro-claro)}
+.evento .data-selo span{color:rgba(255,255,255,.85)}
+.ficha .texto-ouro{background:none; -webkit-background-clip:border-box; background-clip:border-box; color:var(--ouro-texto)}
+.cartao .m-num{color:#fff}
+</style>
+</head>
+<body>
+<div class="palco"><div class="iphone">
+<div class="lat esq silencio"></div>
+<div class="lat esq vol-mais"></div>
+<div class="lat esq vol-menos"></div>
+<div class="lat dir acao"></div>
+<div class="fone">
+
+<div class="ilha" aria-hidden="true"></div>
+<div class="statusbar" aria-hidden="true">
+  <span>9:41</span>
+  <span style="display:flex; gap:7px; align-items:center">
+    <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7.5" width="3" height="4.5" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+    <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 9.7a2 2 0 012 2l-2 .3-2-.3a2 2 0 012-2zM8.5 5.6c1.9 0 3.6.7 4.9 1.9l-1.4 1.5a5 5 0 00-7 0L3.6 7.5a7 7 0 014.9-1.9zM8.5 1.5c3 0 5.7 1.2 7.7 3.1l-1.4 1.5a9 9 0 00-12.6 0L.8 4.6a11 11 0 017.7-3.1z"/></svg>
+    <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x=".5" y=".5" width="21" height="11" rx="3.5" stroke="currentColor" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="2" fill="currentColor"/><path d="M23.5 4v4a2.2 2.2 0 000-4z" fill="currentColor" opacity=".5"/></svg>
+  </span>
+</div>
+
+<!-- splash de abertura -->
+<div id="boot" aria-hidden="true">
+  <div class="anel-wrap">
+    <div class="anel-gira"></div>
+    <div class="anel-txt">
+      <div class="marca texto-ouro">VKUDAKA</div>
+      <div class="sub">Moda com essência</div>
+    </div>
+  </div>
+  <p class="frase">sua melhor versão</p>
+</div>
+
+<!-- ============================== HOME ============================== -->
+<section class="tela ativa" id="s-home">
+  <div class="saudacao">
+    <div>
+      <p class="mudo3">Boa tarde,</p>
+      <h1>Valéria</h1>
+    </div>
+    <div style="flex:1"></div>
+    <span class="chip" id="home-plano">Signature</span>
+  </div>
+  <p class="mudo3" style="margin:2px 20px 0; letter-spacing:.18em; text-transform:uppercase; font-size:10.5px">Sua melhor versão, todos os dias</p>
+
+  <!-- cartão do clube -->
+  <div class="cartao">
+    <div class="linha1">
+      <span class="nome-marca texto-ouro">VKUDAKA</span>
+      <span class="rotulo">Clube · Signature</span>
+    </div>
+    <div class="titular">VALÉRIA A. DUARTE</div>
+    <div class="desde">Membro desde março 2026</div>
+    <div class="metricas">
+      <button onclick="ir('s-creditos')">
+        <div class="m-num" id="home-creditos">R$ 380</div>
+        <div class="m-leg">créditos</div>
+      </button>
+      <button onclick="ir('s-looks',true)">
+        <div class="m-num" id="home-look">1 disponível</div>
+        <div class="m-leg">look do trimestre</div>
+      </button>
+      <button onclick="ir('s-eventos',true)">
+        <div class="m-num">2 convites</div>
+        <div class="m-leg">eventos</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- mensalidade com abatimento -->
+  <div class="bloco ouro">
+    <p class="rotulo">Mensalidade de setembro</p>
+    <div class="mensalidade" style="margin-top:8px">
+      <div>
+        <span class="riscado" id="home-base">R$ 349</span>
+        <div class="valor" id="home-mensalidade">R$ 262</div>
+      </div>
+      <span class="chip ok" id="home-abat">− R$ 87 de abatimento</span>
+    </div>
+    <hr class="fio-h">
+    <p class="mudo" style="font-size:13.5px">Suas compras deste trimestre já abateram <b style="color:var(--ouro-texto)" id="home-abat2">R$ 87</b> da próxima mensalidade. Quanto mais você veste VKUDAKA, menos o clube custa.</p>
+    <button class="btn-lin" style="margin-top:10px" onclick="ir('s-creditos')">Ver extrato completo →</button>
+  </div>
+
+  <!-- atalhos -->
+  <div class="grade-acoes">
+    <button class="acao" onclick="ir('s-looks',true)">
+      <span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 4l-2-1.5L6 4 3 8l3.5 2v10h11V10L21 8l-3-4-4-1.5L12 4z"/></svg></span>
+      <b>Alugar um look</b><span>Seu look do trimestre está disponível</span>
+    </button>
+    <button class="acao" onclick="abrirEvento()">
+      <span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>
+      <b>Fashion Week</b><span>Convite Signature · 12–14 nov</span>
+    </button>
+    <button class="acao" onclick="ir('s-planos')">
+      <span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5L12 3z"/></svg></span>
+      <b>Meu plano</b><span>Signature · comparar com Essence</span>
+    </button>
+    <button class="acao" onclick="ir('s-beneficios')">
+      <span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7c-2-1-5-1-5-3.5C7 1 11 1.5 12 4c1-2.5 5-3 5-.5C17 6 14 6 12 7z"/></svg></span>
+      <b>Benefícios</b><span>Tudo que o Signature inclui</span>
+    </button>
+  </div>
+
+  <!-- próximo evento -->
+  <div class="bloco">
+    <p class="rotulo" style="margin-bottom:10px">Agenda do clube</p>
+    <div class="item-lista">
+      <img class="thumb" src="media/evento-fw.jpg" alt="">
+      <div class="txt"><b>Fashion Week VKUDAKA</b>
+        <p class="mudo3">12–14 nov · São Paulo · convite confirmável</p></div>
+      <button class="btn-lin" onclick="abrirEvento()">Ver</button>
+    </div>
+    <div class="item-lista">
+      <img class="thumb" src="media/evento-colecao.jpg" alt="">
+      <div class="txt"><b>Lançamento Coleção Essência N.4</b>
+        <p class="mudo3">28 ago · flagship Jardins · acesso antecipado</p></div>
+      <button class="btn-lin" onclick="ir('s-eventos',true)">Ver</button>
+    </div>
+  </div>
+
+  <!-- comunidade em destaque -->
+  <div class="bloco">
+    <p class="rotulo" style="margin-bottom:10px">Na comunidade</p>
+    <div class="item-lista">
+      <span class="avatar"><img src="media/mariana.jpg" alt="Mariana C."></span>
+      <div class="txt"><b>Mariana C.</b>
+        <p class="mudo3">"O Conjunto Celeste rendeu a semana inteira…"</p></div>
+      <button class="btn-lin" onclick="ir('s-comunidade',true)">Abrir</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PLANOS ============================ -->
+<section class="tela" id="s-planos">
+  <div class="topo">
+    <button class="volta" onclick="voltar()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <h1>Planos do clube</h1>
+  </div>
+  <p class="mudo" style="margin:0 20px 18px">Duas formas de viver a VKUDAKA. Nas duas, suas compras abatem a mensalidade — o clube se paga no guarda-roupa.</p>
+
+  <div class="plano-carta atual" id="pc-signature">
+    <div class="cab">
+      <div><h3>Signature</h3><span class="chip" id="chip-signature">Seu plano</span></div>
+      <div class="preco">R$ 349<small>/mês</small></div>
+    </div>
+    <ul>
+      <li><span><b>R$ 250 em créditos</b> todo mês, acumuláveis por 6 meses</span></li>
+      <li><span><b>1 look por trimestre sem custo</b> no aluguel de looks</span></li>
+      <li><span><b>10% de abatimento acumulativo</b>: compras da loja viram desconto na mensalidade</span></li>
+      <li><span>Convite para o <b>Fashion Week VKUDAKA</b> + toda a agenda do clube</span></li>
+      <li><span><b>Personal stylist</b> 1x por estação e ajustes de costura cortesia</span></li>
+      <li><span>Acesso antecipado a coleções e peças numeradas</span></li>
+    </ul>
+    <button class="btn" id="btn-signature" disabled onclick="trocarPlano('Signature')">Plano atual</button>
+  </div>
+
+  <div class="plano-carta" id="pc-essence">
+    <div class="cab">
+      <div><h3>Essence</h3><span class="chip neutro" id="chip-essence">Alternativa</span></div>
+      <div class="preco">R$ 189<small>/mês</small></div>
+    </div>
+    <ul>
+      <li><span><b>R$ 120 em créditos</b> todo mês, acumuláveis por 3 meses</span></li>
+      <li><span><b>1 look por semestre sem custo</b> no aluguel de looks</span></li>
+      <li><span><b>5% de abatimento acumulativo</b> na mensalidade</span></li>
+      <li><span>Convites para eventos selecionados da agenda</span></li>
+      <li><span>Comunidade e conteúdos de styling do clube</span></li>
+    </ul>
+    <button class="btn fantasma" id="btn-essence" onclick="trocarPlano('Essence')">Mudar para Essence</button>
+  </div>
+
+  <div class="bloco">
+    <p class="rotulo" style="margin-bottom:8px">Como funciona o abatimento</p>
+    <p class="mudo" style="font-size:13.5px">A cada compra de peças na loja, um percentual do valor (10% no Signature, 5% no Essence) acumula como desconto na sua próxima mensalidade — sem teto dentro do mês e sem expirar dentro do trimestre.</p>
+  </div>
+</section>
+
+<!-- ============================== CRÉDITOS ========================== -->
+<section class="tela" id="s-creditos">
+  <div class="topo">
+    <button class="volta" onclick="voltar()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <h1>Créditos &amp; abatimento</h1>
+  </div>
+
+  <div class="bloco ouro">
+    <p class="rotulo">Saldo de créditos</p>
+    <div class="mensalidade" style="margin-top:6px">
+      <div class="valor" id="cred-saldo">R$ 380</div>
+      <span class="chip">+ R$ 250 em 05/set</span>
+    </div>
+    <p class="mudo3" style="margin-top:6px">Créditos Signature acumulam por até 6 meses e valem em toda a loja e no aluguel de looks.</p>
+  </div>
+
+  <div class="bloco">
+    <p class="rotulo">Abatimento da mensalidade</p>
+    <div class="mensalidade" style="margin-top:6px">
+      <div><div class="valor" id="abat-valor">R$ 87</div><p class="mudo3">acumulado no trimestre</p></div>
+      <span class="chip ok" id="abat-rate">10% das compras</span>
+    </div>
+    <div class="trilho"><i id="abat-barra" style="width:25%"></i></div>
+    <p class="mudo3" id="abat-frase">Faltam <b style="color:var(--marfim)">R$ 262</b> em abatimento para zerar a mensalidade de setembro (R$ 349).</p>
+  </div>
+
+  <div class="bloco">
+    <p class="rotulo" style="margin-bottom:6px">Extrato</p>
+    <div id="extrato">
+      <div class="item-lista"><span class="ico">↧</span>
+        <div class="txt"><b>Créditos do mês</b><p class="mudo3">05 ago · plano Signature</p></div>
+        <div class="dir"><b class="cred-mais">+ R$ 250</b></div></div>
+      <div class="item-lista"><span class="ico">✦</span>
+        <div class="txt"><b>Compra — Blazer Essência</b><p class="mudo3">02 ago · gerou R$ 62 de abatimento</p></div>
+        <div class="dir"><b class="cred-menos">R$ 620</b><p class="mudo3">na loja</p></div></div>
+      <div class="item-lista"><span class="ico">−</span>
+        <div class="txt"><b>Créditos usados — Lenço Seda N.2</b><p class="mudo3">28 jul · loja flagship</p></div>
+        <div class="dir"><b class="cred-menos">− R$ 120</b></div></div>
+      <div class="item-lista"><span class="ico">✦</span>
+        <div class="txt"><b>Compra — Vestido Ateliê</b><p class="mudo3">15 jul · gerou R$ 25 de abatimento</p></div>
+        <div class="dir"><b class="cred-menos">R$ 250</b><p class="mudo3">na loja</p></div></div>
+      <div class="item-lista"><span class="ico">↧</span>
+        <div class="txt"><b>Créditos do mês</b><p class="mudo3">05 jul · plano Signature</p></div>
+        <div class="dir"><b class="cred-mais">+ R$ 250</b></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== LOOKS ============================= -->
+<section class="tela" id="s-looks">
+  <div class="topo">
+    <button class="volta" onclick="voltar()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <h1>Aluguel de looks</h1>
+  </div>
+
+  <div class="faixa-beneficio" id="faixa-look">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ouro)" stroke-width="1.6"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5L12 3z"/></svg>
+    <span id="faixa-look-txt"><b>Look do trimestre disponível.</b> Escolha uma peça e use seu benefício Signature até 30/set — sem custo.</span>
+  </div>
+
+  <div class="grade-looks">
+    <button class="look" onclick="verLook(0)"><div class="foto f1"><img src="looks/prod1.jpg" alt="Conjunto Celeste — blazer cropped e calça em cetim azul-celeste"><span class="num">VKUDAKA 01</span></div>
+      <div class="info"><b>Conjunto Celeste</b><span>Blazer cropped + calça</span><span class="preco">R$ 299,00 · 12x R$ 30,76</span></div></button>
+    <button class="look" onclick="verLook(1)"><div class="foto f2"><img src="looks/prod2.jpg" alt="Conjunto Siena — cropped com forro e calça, clutch dourada"><span class="num">VKUDAKA 02</span></div>
+      <div class="info"><b>Conjunto Siena</b><span>Cropped com forro + calça</span><span class="preco">R$ 279,00 · 12x R$ 28,70</span></div></button>
+    <button class="look" onclick="verLook(2)"><div class="foto f3"><img src="looks/prod3.jpg" alt="Conjunto Essência Rosé — calça e blusa em cetim rosé"><span class="num">VKUDAKA 03</span></div>
+      <div class="info"><b>Conjunto Essência Rosé</b><span>Calça + blusa em cetim</span><span class="preco">R$ 279,00 · 12x R$ 28,70</span></div></button>
+    <button class="look" onclick="verLook(3)"><div class="foto f4"><img src="looks/prod4.jpg" alt="Conjunto Calça + Blazer em alfaiataria terracota"><span class="num">VKUDAKA 04</span></div>
+      <div class="info"><b>Conjunto Calça + Blazer</b><span>Alfaiataria terracota</span><span class="preco">R$ 299,00 · 12x R$ 30,76</span></div></button>
+    <button class="look" onclick="verLook(4)"><div class="foto f5"><img src="looks/prod5.jpg" alt="Conjunto Imponência Clássica — calça e blazer xadrez com camisa branca"><span class="num">VKUDAKA 05</span></div>
+      <div class="info"><b>Conjunto Imponência Clássica</b><span>Calça + blazer xadrez</span><span class="preco">R$ 319,00 · 12x R$ 32,81</span></div></button>
+  </div>
+  <p class="mudo3" style="margin:0 20px 16px">Peças oficiais VKUDAKA. Compre com créditos do clube — toda compra gera abatimento na mensalidade — ou use seu look do trimestre para alugar sem custo.</p>
+</section>
+
+<!-- ============================== LOOK DETALHE ====================== -->
+<section class="tela" id="s-look">
+  <div class="topo">
+    <button class="volta" onclick="voltar()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <h1 id="look-titulo">Look</h1>
+  </div>
+  <div class="foto-grande" id="look-foto"><img id="look-img" src="looks/prod1.jpg" alt=""><span class="num" id="look-num">VKUDAKA 01</span></div>
+  <div class="bloco">
+    <div class="mensalidade">
+      <div><p class="rotulo">Valor</p><div class="valor" id="look-preco">R$ 299,00</div></div>
+      <span class="chip neutro" id="look-parcela">12x de R$ 30,76</span>
+    </div>
+    <hr class="fio-h">
+    <p class="mudo" id="look-desc" style="font-size:14px"></p>
+    <hr class="fio-h">
+    <p class="rotulo">Tamanho</p>
+    <div class="tams" id="look-tams"></div>
+    <hr class="fio-h">
+    <div class="linha-resumo" style="border:0; padding:6px 0 0"><span>Retirada</span><b>Flagship Jardins ou entrega</b></div>
+    <div class="linha-resumo" style="border:0; padding:6px 0 0"><span>Aluguel</span><b>4 dias · sex a seg</b></div>
+  </div>
+  <div style="margin:0 20px 16px; display:grid; gap:10px">
+    <button class="btn" id="look-comprar" onclick="comprar()">Comprar · gera abatimento</button>
+    <button class="btn fantasma" id="look-btn" onclick="abrirReserva()">Usar look do trimestre</button>
+  </div>
+</section>
+
+<!-- ============================== EVENTOS =========================== -->
+<section class="tela" id="s-eventos">
+  <div class="topo">
+    <button class="volta" onclick="voltar()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <h1>Eventos &amp; convites</h1>
+  </div>
+
+  <div class="evento destaque">
+    <div class="capa">
+      <img class="fundo" src="media/evento-fw.jpg" alt="">
+      <span class="scrim"></span>
+      <div class="data-selo"><b>12–14</b><span>nov</span></div>
+      <p class="rotulo" style="margin-bottom:6px">Convite Signature</p>
+      <h3 class="texto-ouro">Fashion Week VKUDAKA</h3>
+    </div>
+    <div class="corpo">
+      <div class="meta"><span>◈ São Paulo · Casa VKUDAKA</span><span>◈ 2 lugares · fila A</span><span>◈ Traje: sua melhor versão</span></div>
+      <p class="mudo" style="font-size:14px">Três dias de desfiles, ateliê aberto e o lançamento da coleção anual. Membros Signature têm acesso à fila A e ao backstage guiado.</p>
+      <button class="btn" id="btn-fw" onclick="confirmarFW()">Confirmar presença</button>
+    </div>
+  </div>
+
+  <div class="evento">
+    <div class="capa">
+      <img class="fundo" src="media/evento-colecao.jpg" alt="">
+      <span class="scrim"></span>
+      <div class="data-selo"><b>28</b><span>ago</span></div>
+      <h3>Lançamento Essência N.4</h3>
+    </div>
+    <div class="corpo">
+      <div class="meta"><span>◈ Flagship Jardins</span><span>◈ 19h</span><span>◈ Todos os planos</span></div>
+      <button class="btn fantasma" id="btn-ev2" onclick="rsvp(this,'Lançamento Essência N.4')">Confirmar presença</button>
+    </div>
+  </div>
+
+  <div class="evento">
+    <div class="capa">
+      <img class="fundo" src="media/evento-jantar.jpg" alt="">
+      <span class="scrim"></span>
+      <div class="data-selo"><b>09</b><span>out</span></div>
+      <h3>Jantar Signature</h3>
+    </div>
+    <div class="corpo">
+      <div class="meta"><span>◈ Lista reservada</span><span>◈ 20h</span><span>◈ Exclusivo Signature</span></div>
+      <button class="btn fantasma" id="btn-ev3" onclick="rsvp(this,'Jantar Signature')">Confirmar presença</button>
+    </div>
+  </div>
+
+  <div class="evento">
+    <div class="capa">
+      <img class="fundo" src="media/evento-workshop.jpg" alt="">
+      <span class="scrim"></span>
+      <div class="data-selo"><b>17</b><span>out</span></div>
+      <h3>Workshop de styling — sua melhor versão</h3>
+    </div>
+    <div class="corpo">
+      <div class="meta"><span>◈ Casa VKUDAKA</span><span>◈ 10h</span><span>◈ Todos os planos</span></div>
+      <button class="btn fantasma" id="btn-ev4" onclick="rsvp(this,'Workshop de styling')">Confirmar presença</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== COMUNIDADE ======================== -->
+<section class="tela" id="s-comunidade">
+  <div class="topo">
+    <button class="volta" onclick="voltar()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <h1>Comunidade</h1>
+  </div>
+  <p class="mudo" style="margin:0 20px 16px">O salão do clube: looks reais, dicas entre clientes e o que rolou nos eventos.</p>
+
+  <div class="compor">
+    <input id="compor-input" placeholder="Compartilhe sua melhor versão…" onkeydown="if(event.key==='Enter')publicar()">
+    <button class="enviar" onclick="publicar()" aria-label="Publicar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
+  </div>
+
+  <div id="feed">
+    <div class="post">
+      <div class="cab"><span class="avatar"><img src="media/mariana.jpg" alt="Mariana C."></span><div><b>Mariana C.</b><span class="mudo3">Signature · há 2h</span></div></div>
+      <p>O Conjunto Celeste rendeu a semana inteira: reunião, jantar e ainda gerou abatimento na mensalidade. Comprar pelo clube é outra experiência. ✦</p>
+      <img class="post-foto" src="looks/prod1.jpg" alt="Conjunto Celeste VKUDAKA">
+      <div class="pé"><button onclick="curtir(this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21C7 16.5 3 13.3 3 9.5 3 7 5 5 7.5 5c1.7 0 3.2.9 4.5 2.6C13.3 5.9 14.8 5 16.5 5 19 5 21 7 21 9.5c0 3.8-4 7-9 11.5z"/></svg><span class="n">24</span></button>
+      <button><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 01-8 8H4l2-3a8 8 0 1115-5z"/></svg><span>6</span></button></div>
+    </div>
+    <div class="post">
+      <div class="cab"><span class="avatar"><img src="media/renata.jpg" alt="Renata S."></span><div><b>Renata S.</b><span class="mudo3">Essence · há 5h</span></div></div>
+      <p>Meninas, o workshop de styling do mês passado mudou meu guarda-roupa. Quem vai no de outubro? Podemos combinar de ir juntas do metrô.</p>
+      <div class="pé"><button onclick="curtir(this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21C7 16.5 3 13.3 3 9.5 3 7 5 5 7.5 5c1.7 0 3.2.9 4.5 2.6C13.3 5.9 14.8 5 16.5 5 19 5 21 7 21 9.5c0 3.8-4 7-9 11.5z"/></svg><span class="n">18</span></button>
+      <button><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 01-8 8H4l2-3a8 8 0 1115-5z"/></svg><span>11</span></button></div>
+    </div>
+    <div class="post">
+      <div class="cab"><span class="avatar">VK</span><div><b>Casa VKUDAKA</b><span class="mudo3">Oficial · ontem</span></div></div>
+      <p>Fila A confirmada para membros Signature no Fashion Week VKUDAKA. As peças do desfile entram no aluguel de looks na semana seguinte — em primeira mão para o clube.</p>
+      <img class="post-foto" src="media/evento-fw.jpg" alt="Fashion Week VKUDAKA">
+      <div class="pé"><button onclick="curtir(this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21C7 16.5 3 13.3 3 9.5 3 7 5 5 7.5 5c1.7 0 3.2.9 4.5 2.6C13.3 5.9 14.8 5 16.5 5 19 5 21 7 21 9.5c0 3.8-4 7-9 11.5z"/></svg><span class="n">57</span></button>
+      <button><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 01-8 8H4l2-3a8 8 0 1115-5z"/></svg><span>19</span></button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== BENEFÍCIOS ======================== -->
+<section class="tela" id="s-beneficios">
+  <div class="topo">
+    <button class="volta" onclick="voltar()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <h1>Benefícios Signature</h1>
+  </div>
+  <div class="hero-foto"><img src="media/beneficios.jpg" alt="Acessórios VKUDAKA"></div>
+  <div class="bloco">
+    <div class="item-lista"><span class="ico">✦</span><div class="txt"><b>Créditos mensais de R$ 250</b><p class="mudo3">Acumuláveis por 6 meses, valem em loja e aluguel</p></div></div>
+    <div class="item-lista"><span class="ico">✦</span><div class="txt"><b>1 look por trimestre sem custo</b><p class="mudo3">Higienização e ajustes inclusos</p></div></div>
+    <div class="item-lista"><span class="ico">✦</span><div class="txt"><b>Abatimento acumulativo de 10%</b><p class="mudo3">Compras viram desconto na mensalidade seguinte</p></div></div>
+    <div class="item-lista"><span class="ico">✦</span><div class="txt"><b>Fashion Week VKUDAKA</b><p class="mudo3">Fila A, 2 lugares e backstage guiado</p></div></div>
+    <div class="item-lista"><span class="ico">✦</span><div class="txt"><b>Personal stylist por estação</b><p class="mudo3">Consultoria "sua melhor versão", 1x a cada coleção</p></div></div>
+    <div class="item-lista"><span class="ico">✦</span><div class="txt"><b>Acesso antecipado a coleções</b><p class="mudo3">48h antes do público, incluindo peças numeradas</p></div></div>
+    <div class="item-lista"><span class="ico">✦</span><div class="txt"><b>Ajustes de costura cortesia</b><p class="mudo3">Em qualquer peça VKUDAKA, sempre</p></div></div>
+    <div class="item-lista"><span class="ico">✦</span><div class="txt"><b>Sala do clube na flagship</b><p class="mudo3">Café, provador reservado e guarda-volumes</p></div></div>
+  </div>
+  <div style="margin:0 20px 16px"><button class="btn fantasma" onclick="ir('s-planos')">Comparar com o plano Essence</button></div>
+</section>
+
+<!-- ============================== PERFIL ============================ -->
+<section class="tela" id="s-perfil">
+  <div class="topo"><h1 style="padding-left:4px">Perfil</h1></div>
+  <div class="bloco" style="display:flex; gap:16px; align-items:center">
+    <span class="avatar" style="width:58px; height:58px"><img src="media/valeria.jpg" alt="Valéria"></span>
+    <div><b style="font-size:17px">Valéria A. Duarte</b>
+      <p class="mudo3">Membro Signature · desde março 2026</p>
+      <p class="mudo3">valeria@email.com</p></div>
+  </div>
+  <div class="bloco">
+    <div class="item-lista"><div class="txt"><b>Meu plano</b><p class="mudo3" id="perfil-plano">Signature · R$ 349/mês</p></div><button class="btn-lin" onclick="ir('s-planos')">Gerenciar</button></div>
+    <div class="item-lista"><div class="txt"><b>Pagamento</b><p class="mudo3">Cartão •• 4412 · dia 05</p></div><button class="btn-lin" onclick="toast('Protótipo: tela de pagamento fora do escopo')">Editar</button></div>
+    <div class="item-lista"><div class="txt"><b>Medidas &amp; preferências</b><p class="mudo3">Tam. M · 38 · estilo clássico-moderno</p></div><button class="btn-lin" onclick="toast('Protótipo: tela de medidas fora do escopo')">Editar</button></div>
+    <div class="item-lista"><div class="txt"><b>Notificações</b><p class="mudo3">Eventos e créditos ativados</p></div><button class="btn-lin" onclick="toast('Protótipo: preferências fora do escopo')">Editar</button></div>
+  </div>
+  <div style="margin:0 20px 16px"><button class="btn fantasma" onclick="sair()">Sair do app</button></div>
+  <p class="mudo3" style="text-align:center">Clube VKUDAKA · protótipo v1 · dados simulados</p>
+</section>
+
+<!-- ============================== NAV =============================== -->
+<nav class="navbar" id="navbar">
+  <div class="caixa">
+    <button data-tab="s-home" class="ativa" onclick="tab('s-home')" aria-label="Início">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 11l9-8 9 8v10h-6v-6h-6v6H3V11z"/></svg><span>Clube</span></button>
+    <button data-tab="s-looks" onclick="tab('s-looks')" aria-label="Looks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 4l-2-1.5L6 4 3 8l3.5 2v10h11V10L21 8l-3-4-4-1.5L12 4z"/></svg><span>Looks</span></button>
+    <button data-tab="s-eventos" onclick="tab('s-eventos')" aria-label="Eventos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Eventos</span></button>
+    <button data-tab="s-comunidade" onclick="tab('s-comunidade')" aria-label="Comunidade">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M17 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9.5 11a4 4 0 100-8 4 4 0 000 8zM22 21v-2a4 4 0 00-3-3.9M15.5 3.1a4 4 0 010 7.8"/></svg><span>Clube+</span></button>
+    <button data-tab="s-perfil" onclick="tab('s-perfil')" aria-label="Perfil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg><span>Perfil</span></button>
+  </div>
+</nav>
+
+<!-- ============================== FICHA RESERVA ===================== -->
+<div class="veu" id="veu" onclick="if(event.target===this)fecharFicha()">
+  <div class="ficha">
+    <div class="alca"></div>
+    <h3>Reservar look</h3>
+    <p class="mudo3" style="margin-bottom:10px" id="ficha-sub">Benefício do trimestre · Signature</p>
+    <div class="linha-resumo"><span>Look</span><b id="ficha-look">—</b></div>
+    <div class="linha-resumo"><span>Tamanho</span><b id="ficha-tam">M</b></div>
+    <div class="linha-resumo"><span>Período</span><b>sex 22/ago → seg 25/ago</b></div>
+    <div class="linha-resumo"><span>Valor</span><b class="texto-ouro" id="ficha-valor">Sem custo · benefício do trimestre</b></div>
+    <div style="display:grid; gap:10px; margin-top:18px">
+      <button class="btn" onclick="confirmarReserva()">Confirmar reserva</button>
+      <button class="btn fantasma" onclick="fecharFicha()">Voltar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== TOAST ============================= -->
+<div class="toast" id="toast">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+  <span id="toast-txt"></span>
+</div>
+
+<div class="indicador" aria-hidden="true"></div>
+
+</div></div></div>
+
+<script>
+/* ============================ ABERTURA ============================== */
+setTimeout(() => {
+  const boot = document.getElementById('boot');
+  boot.classList.add('sai');
+  setTimeout(() => boot.remove(), 800);
+}, 2300);
+
+/* ============================ ESTADO ================================ */
+const estado = {
+  plano: 'Signature',
+  lookTrimestreUsado: false,
+  tamanho: 'M',
+  lookAtual: 0,
+  abat: 87,            // abatimento acumulado no trimestre (R$)
+  pilha: []            // navegação: telas empilhadas para o botão voltar
+};
+
+const LOOKS = [
+  {nome:'Conjunto Celeste', num:'VKUDAKA 01', img:'looks/prod1.jpg', f:'f1', preco:299, parcela:'12x de R$ 30,76',
+   desc:'Blazer cropped acetinado com lapela em contraste e calça de cetim azul-celeste. O conjunto que abre reuniões e fecha jantares — brilho discreto, presença absoluta.'},
+  {nome:'Conjunto Siena', num:'VKUDAKA 02', img:'looks/prod2.jpg', f:'f2', preco:279, parcela:'12x de R$ 28,70',
+   desc:'Cropped com forro e alças finas + calça de alfaiataria fluida. Caimento impecável — e a clutch dourada como assinatura da casa.'},
+  {nome:'Conjunto Essência Rosé', num:'VKUDAKA 03', img:'looks/prod3.jpg', f:'f3', preco:279, parcela:'12x de R$ 28,70',
+   desc:'Calça + blusa em cetim rosé com gola alta e botões — a peça-manifesto da coleção Essência. Feminina, imponente, inesquecível.'},
+  {nome:'Conjunto Calça + Blazer', num:'VKUDAKA 04', img:'looks/prod4.jpg', f:'f4', preco:299, parcela:'12x de R$ 30,76',
+   desc:'Alfaiataria terracota de corte preciso com camisa de laço. Do escritório ao evento — o marrom que virou o novo preto.'},
+  {nome:'Conjunto Imponência Clássica', num:'VKUDAKA 05', img:'looks/prod5.jpg', f:'f5', preco:319, parcela:'12x de R$ 32,81',
+   desc:'Calça + blazer em xadrez príncipe-de-gales sobre camisa branca. O clássico que não pede licença — imponência é o nome.'}
+];
+
+function precoBR(v){ return 'R$ ' + v.toFixed(2).replace('.', ','); }
+
+/* ============================ NAVEGAÇÃO ============================= */
+const TABS = ['s-home','s-looks','s-eventos','s-comunidade','s-perfil'];
+
+function mostra(id){
+  document.querySelectorAll('.tela').forEach(t => t.classList.toggle('ativa', t.id === id));
+  const emTab = TABS.includes(id);
+  document.querySelectorAll('.navbar button').forEach(b =>
+    b.classList.toggle('ativa', b.dataset.tab === id));
+  document.getElementById(id).scrollTop = 0;
+}
+function tab(id){ estado.pilha = []; mostra(id); }
+function ir(id, deTab){ estado.pilha.push(document.querySelector('.tela.ativa').id); mostra(id); }
+function voltar(){ mostra(estado.pilha.pop() || 's-home'); }
+function sair(){ location.reload(); }
+
+/* ============================ TOAST ================================= */
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById('toast');
+  document.getElementById('toast-txt').textContent = msg;
+  t.classList.add('mostra');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('mostra'), 3200);
+}
+
+/* ============================ ABATIMENTO ============================ */
+function baseMensalidade(){ return estado.plano === 'Signature' ? 349 : 189; }
+function taxaAbat(){ return estado.plano === 'Signature' ? 0.10 : 0.05; }
+function atualizaAbat(){
+  const base = baseMensalidade();
+  const abat = Math.min(estado.abat, base);
+  document.getElementById('home-base').textContent = 'R$ ' + base;
+  document.getElementById('home-mensalidade').textContent = 'R$ ' + (base - abat);
+  document.getElementById('home-abat').textContent = '− R$ ' + abat + ' de abatimento';
+  document.getElementById('home-abat2').textContent = 'R$ ' + estado.abat;
+  document.getElementById('abat-valor').textContent = 'R$ ' + estado.abat;
+  document.getElementById('abat-rate').textContent = Math.round(taxaAbat()*100) + '% das compras';
+  document.getElementById('abat-barra').style.width = Math.min(100, Math.round(estado.abat/base*100)) + '%';
+  const falta = Math.max(0, base - estado.abat);
+  document.getElementById('abat-frase').innerHTML = falta > 0
+    ? 'Faltam <b style="color:var(--marfim)">R$ ' + falta + '</b> em abatimento para zerar a mensalidade de setembro (R$ ' + base + ').'
+    : '<b style="color:var(--ouro-texto)">Mensalidade de setembro zerada!</b> Suas compras cobriram os R$ ' + base + ' do plano.';
+}
+function comprar(){
+  const P = LOOKS[estado.lookAtual];
+  const ganho = Math.round(P.preco * taxaAbat());
+  estado.abat += ganho;
+  atualizaAbat();
+  const item = document.createElement('div');
+  item.className = 'item-lista';
+  item.innerHTML = '<span class="ico">✦</span>' +
+    '<div class="txt"><b></b><p class="mudo3">hoje · gerou R$ ' + ganho + ' de abatimento</p></div>' +
+    '<div class="dir"><b class="cred-menos">' + precoBR(P.preco) + '</b><p class="mudo3">na loja</p></div>';
+  item.querySelector('b').textContent = 'Compra — ' + P.nome;
+  const ext = document.getElementById('extrato');
+  ext.insertBefore(item, ext.firstChild);
+  toast(P.nome + ' — compra registrada · + R$ ' + ganho + ' de abatimento ✦');
+}
+
+/* ============================ PLANOS ================================ */
+function trocarPlano(novo){
+  estado.plano = novo;
+  const sig = novo === 'Signature';
+  document.getElementById('chip-signature').textContent = sig ? 'Seu plano' : 'Alternativa';
+  document.getElementById('chip-signature').className = sig ? 'chip' : 'chip neutro';
+  document.getElementById('chip-essence').textContent  = sig ? 'Alternativa' : 'Seu plano';
+  document.getElementById('chip-essence').className  = sig ? 'chip neutro' : 'chip';
+  document.getElementById('pc-signature').classList.toggle('atual', sig);
+  document.getElementById('pc-essence').classList.toggle('atual', !sig);
+  const bS = document.getElementById('btn-signature'), bE = document.getElementById('btn-essence');
+  bS.disabled = sig; bE.disabled = !sig;
+  bS.textContent = sig ? 'Plano atual' : 'Mudar para Signature';
+  bE.textContent = sig ? 'Mudar para Essence' : 'Plano atual';
+  bS.className = sig ? 'btn' : 'btn fantasma';
+  bE.className = sig ? 'btn fantasma' : 'btn';
+  document.getElementById('perfil-plano').textContent =
+    sig ? 'Signature · R$ 349/mês' : 'Essence · R$ 189/mês';
+  document.getElementById('home-plano').textContent = novo;
+  atualizaAbat();
+  toast(sig ? 'Bem-vinda de volta ao Signature ✦' : 'Plano alterado para Essence a partir do próximo ciclo');
+}
+
+/* ============================ LOOKS ================================= */
+function verLook(i){
+  estado.lookAtual = i;
+  const L = LOOKS[i];
+  document.getElementById('look-titulo').textContent = L.nome;
+  const img = document.getElementById('look-img');
+  img.src = L.img; img.alt = L.nome;
+  document.getElementById('look-num').textContent = L.num;
+  document.getElementById('look-desc').textContent = L.desc;
+  document.getElementById('look-preco').textContent = precoBR(L.preco);
+  document.getElementById('look-parcela').textContent = L.parcela;
+  const foto = document.getElementById('look-foto');
+  foto.className = 'foto-grande ' + L.f;
+  const tams = document.getElementById('look-tams');
+  tams.innerHTML = '';
+  ['PP','P','M','G','GG'].forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'tam' + (t === estado.tamanho ? ' sel' : '');
+    b.textContent = t;
+    b.onclick = () => { estado.tamanho = t;
+      tams.querySelectorAll('.tam').forEach(x => x.classList.toggle('sel', x === b));
+    };
+    tams.appendChild(b);
+  });
+  atualizaBotaoLook();
+  ir('s-look');
+}
+function aluguelDe(L){ return Math.round(L.preco * 0.3); }
+function atualizaBotaoLook(){
+  const btn = document.getElementById('look-btn');
+  btn.textContent = estado.lookTrimestreUsado
+    ? 'Alugar com créditos · R$ ' + aluguelDe(LOOKS[estado.lookAtual])
+    : 'Usar look do trimestre · sem custo';
+}
+function abrirReserva(){
+  const L = LOOKS[estado.lookAtual];
+  document.getElementById('ficha-look').textContent = L.nome;
+  document.getElementById('ficha-tam').textContent = estado.tamanho;
+  const gratis = !estado.lookTrimestreUsado;
+  document.getElementById('ficha-valor').textContent =
+    gratis ? 'Sem custo · benefício do trimestre' : 'R$ ' + aluguelDe(L) + ' em créditos';
+  document.getElementById('ficha-sub').textContent =
+    gratis ? 'Benefício do trimestre · ' + estado.plano : 'Aluguel com créditos do clube';
+  document.getElementById('veu').classList.add('aberto');
+}
+function fecharFicha(){ document.getElementById('veu').classList.remove('aberto'); }
+function confirmarReserva(){
+  fecharFicha();
+  const L = LOOKS[estado.lookAtual];
+  if (!estado.lookTrimestreUsado){
+    estado.lookTrimestreUsado = true;
+    document.getElementById('home-look').textContent = 'Reservado';
+    document.getElementById('faixa-look-txt').innerHTML =
+      '<b>Look do trimestre reservado:</b> ' + L.nome + ' · retirada sex 22/ago. Próximo benefício em out.';
+    toast(L.nome + ' reservado — sem custo, benefício do trimestre ✦');
+  } else {
+    toast(L.nome + ' reservado com créditos do clube');
+  }
+  atualizaBotaoLook();
+  voltar();
+}
+
+/* ============================ EVENTOS =============================== */
+function abrirEvento(){ ir('s-eventos'); }
+function confirmarFW(){
+  const b = document.getElementById('btn-fw');
+  b.textContent = 'Presença confirmada · fila A';
+  b.disabled = true;
+  toast('Até novembro! Seu convite Signature está na aba Eventos ✦');
+}
+function rsvp(btn, nome){
+  btn.textContent = 'Presença confirmada';
+  btn.disabled = true;
+  toast('Presença confirmada: ' + nome);
+}
+
+/* ============================ COMUNIDADE ============================ */
+function curtir(btn){
+  const n = btn.querySelector('.n');
+  const curtido = btn.classList.toggle('curtido');
+  n.textContent = +n.textContent + (curtido ? 1 : -1);
+  const svg = btn.querySelector('svg path');
+  svg.setAttribute('fill', curtido ? 'currentColor' : 'none');
+}
+function publicar(){
+  const inp = document.getElementById('compor-input');
+  const txt = inp.value.trim();
+  if (!txt) return;
+  const post = document.createElement('div');
+  post.className = 'post';
+  post.innerHTML =
+    '<div class="cab"><span class="avatar"><img src="media/valeria.jpg" alt="Valéria D."></span><div><b>Valéria D.</b><span class="mudo3">Signature · agora</span></div></div>' +
+    '<p></p>' +
+    '<div class="pé"><button onclick="curtir(this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21C7 16.5 3 13.3 3 9.5 3 7 5 5 7.5 5c1.7 0 3.2.9 4.5 2.6C13.3 5.9 14.8 5 16.5 5 19 5 21 7 21 9.5c0 3.8-4 7-9 11.5z"/></svg><span class="n">0</span></button>' +
+    '<button><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 01-8 8H4l2-3a8 8 0 1115-5z"/></svg><span>0</span></button></div>';
+  post.querySelector('p').textContent = txt;
+  const feed = document.getElementById('feed');
+  feed.insertBefore(post, feed.firstChild);
+  inp.value = '';
+  toast('Publicado na comunidade ✦');
+}
+
+atualizaAbat();
+</script>
+</body>
+</html>

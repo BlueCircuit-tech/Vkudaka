@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: vkudaka-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vkudaka
+      POSTGRES_PASSWORD: vkudaka
+      POSTGRES_DB: vkudaka
+    ports:
+      # 5435 no host: 5432-5434 já estão ocupadas por outros projetos desta máquina.
+      - '5435:5432'
+    volumes:
+      - vkudaka-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U vkudaka']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  vkudaka-pgdata:

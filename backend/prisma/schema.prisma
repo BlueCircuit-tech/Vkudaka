@@ -1,0 +1,1153 @@
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  CLUBE DE ASSINATURAS VKUDAKA — modelo de dados                          ║
+// ║  PostgreSQL · Prisma 5                                                   ║
+// ║                                                                          ║
+// ║  Convenções:                                                             ║
+// ║   • Todo valor monetário é INTEIRO EM CENTAVOS e o campo termina em Cents║
+// ║   • Nada é apagado fisicamente onde há rastro financeiro (soft delete)   ║
+// ║   • Saldos são derivados de ledgers; colunas de saldo são cache          ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  MEMBER // cliente do app
+  GATE   // portaria: só valida ingresso e lê lista de presença
+  STAFF  // operação: catálogo, eventos, pedidos, push
+  ADMIN  // tudo, inclusive planos, descontos e financeiro
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
+enum Gender {
+  FEMININO
+  MASCULINO
+  NAO_BINARIO
+  OUTRO
+  PREFIRO_NAO_INFORMAR
+}
+
+enum BillingInterval {
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+/// RN-02: como o percentual do plano é aplicado.
+enum RebateMode {
+  CREDIT_NEXT_INVOICE // padrão: vira crédito da próxima mensalidade
+  IMMEDIATE_DISCOUNT  // desconta no ato da compra
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELED
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  OVERDUE
+  CANCELED
+  REFUNDED
+}
+
+enum CreditStatus {
+  AVAILABLE
+  PARTIALLY_APPLIED
+  APPLIED
+  CANCELED
+}
+
+enum WalletTxType {
+  TOPUP             // recarga via gateway
+  PURCHASE          // débito em compra/aluguel
+  REFUND            // estorno de pedido
+  ADJUSTMENT_CREDIT // ajuste manual do CRM (+)
+  ADJUSTMENT_DEBIT  // ajuste manual do CRM (−)
+}
+
+/// Define onde a peça aparece no app. Aluguel fica em segundo plano na vitrine.
+enum ProductAvailability {
+  SALE
+  RENTAL
+  BOTH
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum OrderType {
+  SALE
+  RENTAL
+  TICKET
+  WALLET_TOPUP
+  SUBSCRIPTION
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  RETURN_PENDING // aluguel aguardando devolução
+  RETURNED
+  CANCELED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  WALLET
+  APPLE_IAP
+  GOOGLE_IAP
+  MANUAL
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+  CANCELED
+  CHARGEBACK
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+  FREE_SHIPPING
+}
+
+enum ShippingService {
+  PAC
+  SEDEX
+  PICKUP
+  COURIER
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELED
+  FINISHED
+}
+
+enum AttendeeKind {
+  SUBSCRIBER_RSVP // assinante: não paga entrada
+  PAID_TICKET     // avulso: comprou ingresso
+  GUEST           // convidado pela casa
+}
+
+enum TicketStatus {
+  VALID
+  USED
+  CANCELED
+  REFUNDED
+}
+
+enum PostStatus {
+  PUBLISHED
+  HIDDEN   // moderação
+  DELETED  // soft delete pelo autor
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+enum ModelApplicationStatus {
+  RECEIVED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+/// Gatilhos de push (RN-09)
+enum NotificationTrigger {
+  MANUAL
+  NEW_PRODUCT
+  NEW_EVENT
+  WALLET_TOPUP_CONFIRMED
+  WALLET_BALANCE_EMPTY
+  PURCHASE_CONFIRMED
+  ORDER_SHIPPED
+  SUBSCRIPTION_RENEWED
+  SUBSCRIPTION_PAST_DUE
+}
+
+enum NotificationStatus {
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IDENTIDADE E PERFIL
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  // Cadastro completo (2.1) — obrigatórios são NOT NULL
+  fullName     String     @db.VarChar(160) // *obrigatório
+  cpf          String     @unique @db.Char(11) // *obrigatório, somente dígitos
+  email        String     @unique @db.VarChar(160) // *obrigatório
+  phone        String     @db.VarChar(20) // *obrigatório, E.164 sem "+"
+  birthDate    DateTime?  @db.Date
+  instagram    String?    @db.VarChar(60)
+  gender       Gender?
+  passwordHash String
+  avatarUrl    String? // nulo ⇒ app gera avatar com iniciais
+  role         UserRole   @default(MEMBER)
+  status       UserStatus @default(ACTIVE)
+
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  acceptedTermsAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  addresses     Address[]
+  measurements  Measurement?
+  wallet        Wallet?
+  subscriptions Subscription[]
+  orders        Order[]
+  payments      Payment[]
+  credits       SubscriptionCredit[]
+  rsvps         EventAttendee[]
+  tickets       Ticket[]
+  posts         Post[]
+  comments      Comment[]
+  likes         PostLike[]
+  devices       Device[]
+  notifications NotificationDelivery[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]             @relation("AuditActor")
+  ticketScans   Ticket[]               @relation("TicketScanner")
+
+  @@index([status, role])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  userAgent String?   @db.VarChar(255)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Address {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  label      String?  @db.VarChar(40) // "Casa", "Trabalho"
+  zipCode    String   @db.Char(8) // CEP sem máscara — base do frete
+  street     String   @db.VarChar(160)
+  number     String   @db.VarChar(20)
+  complement String?  @db.VarChar(80)
+  district   String   @db.VarChar(80)
+  city       String   @db.VarChar(80)
+  state      String   @db.Char(2)
+  country    String   @default("BR") @db.Char(2)
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shipments Shipment[]
+
+  @@index([userId, isDefault])
+  @@map("addresses")
+}
+
+/// Preferências de tamanho e medidas (2.1) — usadas na vitrine e pela equipe de ajuste.
+model Measurement {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @unique @db.Uuid
+  dressSize      String?  @db.VarChar(10) // manequim: 36, 38, P, M...
+  topSize        String?  @db.VarChar(10)
+  bottomSize     String?  @db.VarChar(10)
+  shoeSize       String?  @db.VarChar(10)
+  bustCm         Int?
+  waistCm        Int?
+  hipsCm         Int?
+  heightCm       Int?
+  weightKg       Int?
+  favoriteColors String[] @default([])
+  notes          String?  @db.VarChar(500)
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("measurements")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLANOS, ASSINATURAS E CRÉDITO DE MENSALIDADE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Planos cadastráveis no CRM (3.2). O app nunca tem percentual hardcoded.
+model Plan {
+  id            String          @id @default(uuid()) @db.Uuid
+  name          String          @unique @db.VarChar(60) // "Essence", "Signature"
+  slug          String          @unique @db.VarChar(60)
+  description   String?         @db.VarChar(500)
+  priceCents    Int // ex.: 9900 = R$ 99,00
+  interval      BillingInterval @default(MONTHLY)
+  intervalCount Int             @default(1)
+
+  /// RN-02 — percentual de abatimento do nível (10 = 10%).
+  rebatePercent Decimal    @default(0) @db.Decimal(5, 2)
+  /// RN-02 — como o percentual é aplicado. Padrão: crédito na próxima mensalidade.
+  rebateMode    RebateMode @default(CREDIT_NEXT_INVOICE)
+
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  benefits      PlanBenefit[]
+  subscriptions Subscription[]
+  campaigns     NotificationCampaign[]
+
+  @@index([isActive, displayOrder])
+  @@map("plans")
+}
+
+model PlanBenefit {
+  id           String  @id @default(uuid()) @db.Uuid
+  planId       String  @db.Uuid
+  title        String  @db.VarChar(120)
+  description  String? @db.VarChar(300)
+  icon         String? @db.VarChar(40)
+  displayOrder Int     @default(0)
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, displayOrder])
+  @@map("plan_benefits")
+}
+
+model Subscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @db.Uuid
+  planId             String             @db.Uuid
+  status             SubscriptionStatus @default(ACTIVE)
+  startedAt          DateTime           @default(now())
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean            @default(false)
+  canceledAt         DateTime?
+  /// Preço travado no ato da assinatura — reajuste de plano não altera contrato vigente.
+  priceCents         Int
+  /// RN-02 — abatimento negociado para ESTE contrato (10 = 10%).
+  /// Nulo significa "o do plano": a direção só preenche quando combina uma
+  /// condição diferente com a assinante, e o valor fica travado no contrato
+  /// pelo mesmo motivo que o preço — mudar o nível não mexe em quem já entrou.
+  rebatePercent      Decimal?           @db.Decimal(5, 2)
+  externalId         String?            @db.VarChar(120) // id no gateway / IAP
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user     User                  @relation(fields: [userId], references: [id])
+  plan     Plan                  @relation(fields: [planId], references: [id])
+  invoices SubscriptionInvoice[]
+  credits  SubscriptionCredit[]
+
+  @@index([userId, status])
+  @@index([status, currentPeriodEnd]) // job de renovação
+  @@map("subscriptions")
+}
+
+model SubscriptionInvoice {
+  id             String        @id @default(uuid()) @db.Uuid
+  subscriptionId String        @db.Uuid
+  referenceMonth DateTime      @db.Date
+  grossCents     Int // mensalidade cheia
+  creditCents    Int           @default(0) // RN-05: abatimento aplicado
+  netCents       Int // gross − credit (nunca < 0)
+  status         InvoiceStatus @default(OPEN)
+  dueDate        DateTime      @db.Date
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  subscription       Subscription        @relation(fields: [subscriptionId], references: [id])
+  payments           Payment[]
+  creditApplications CreditApplication[]
+
+  @@unique([subscriptionId, referenceMonth])
+  @@index([status, dueDate])
+  @@map("subscription_invoices")
+}
+
+/// RN-02/RN-05 — crédito gerado por compra, para abater a PRÓXIMA mensalidade.
+/// Sem teto e sem expiração: `expiresAt` existe apenas para créditos promocionais
+/// lançados manualmente pelo CRM e é NULO para todo crédito de abatimento.
+model SubscriptionCredit {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @db.Uuid
+  subscriptionId String?      @db.Uuid
+  originOrderId  String?      @unique @db.Uuid // 1 pedido gera no máximo 1 crédito (não acumulativo)
+  amountCents    Int
+  usedCents      Int          @default(0)
+  status         CreditStatus @default(AVAILABLE)
+  /// Percentual e base que originaram o crédito — auditoria da RN-02.
+  rebatePercent  Decimal      @db.Decimal(5, 2)
+  baseCents      Int
+  reason         String       @db.VarChar(120)
+  expiresAt      DateTime? // sempre NULL para abatimento de compra
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id])
+  subscription Subscription?       @relation(fields: [subscriptionId], references: [id])
+  originOrder  Order?              @relation(fields: [originOrderId], references: [id])
+  applications CreditApplication[]
+
+  @@index([userId, status, createdAt]) // consumo FIFO
+  @@map("subscription_credits")
+}
+
+model CreditApplication {
+  id          String   @id @default(uuid()) @db.Uuid
+  creditId    String   @db.Uuid
+  invoiceId   String   @db.Uuid
+  amountCents Int
+  createdAt   DateTime @default(now())
+
+  credit  SubscriptionCredit  @relation(fields: [creditId], references: [id])
+  invoice SubscriptionInvoice @relation(fields: [invoiceId], references: [id])
+
+  @@unique([creditId, invoiceId])
+  @@map("credit_applications")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CARTEIRA DIGITAL (2.6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Wallet {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @db.Uuid
+  /// Cache do saldo. Fonte de verdade = soma de wallet_transactions.
+  balanceCents Int      @default(0)
+  currency     String   @default("BRL") @db.Char(3)
+  isBlocked    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id           String       @id @default(uuid()) @db.Uuid
+  walletId     String       @db.Uuid
+  type         WalletTxType
+  /// Positivo credita, negativo debita. Saldo = SUM(amountCents).
+  amountCents  Int
+  balanceAfter Int
+  description  String       @db.VarChar(160)
+  orderId      String?      @db.Uuid
+  paymentId    String?      @db.Uuid
+  createdById  String?      @db.Uuid // ajuste manual: quem fez
+  createdAt    DateTime     @default(now())
+
+  wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  order   Order?   @relation(fields: [orderId], references: [id])
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([walletId, createdAt])
+  @@map("wallet_transactions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CATÁLOGO (2.3 / 3.3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Category {
+  id           String              @id @default(uuid()) @db.Uuid
+  name         String              @db.VarChar(80)
+  slug         String              @unique @db.VarChar(80)
+  /// Separa as vitrines "Compra" e "Escolha seu Look" (aluguel).
+  scope        ProductAvailability @default(SALE)
+  displayOrder Int                 @default(0)
+  isActive     Boolean             @default(true)
+  imageUrl     String?
+
+  products Product[]
+
+  @@index([scope, displayOrder])
+  @@map("categories")
+}
+
+model Product {
+  id          String  @id @default(uuid()) @db.Uuid
+  sku         String  @unique @db.VarChar(40)
+  name        String  @db.VarChar(160)
+  slug        String  @unique @db.VarChar(180)
+  description String? @db.Text
+  categoryId  String? @db.Uuid
+  /// Define claramente se a peça é para Venda, Aluguel ou Ambos (3.3).
+  availability ProductAvailability @default(SALE)
+  status       ProductStatus       @default(DRAFT)
+
+  salePriceCents     Int? // obrigatório quando availability ∈ {SALE, BOTH}
+  rentalPriceCents   Int? // obrigatório quando availability ∈ {RENTAL, BOTH}
+  rentalDays         Int  @default(4)
+  /// Caução do aluguel, se houver.
+  rentalDepositCents Int?
+
+  brand         String?   @default("VKUDAKA") @db.VarChar(60)
+  composition   String?   @db.VarChar(240)
+  careLabel     String?   @db.VarChar(240)
+  weightGrams   Int       @default(500) // frete
+  lengthCm      Int       @default(30)
+  widthCm       Int       @default(25)
+  heightCm      Int       @default(5)
+  /// Isenta esta peça de frete (RN-08).
+  freeShipping  Boolean   @default(false)
+  isHighlighted Boolean   @default(false)
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  category   Category?        @relation(fields: [categoryId], references: [id])
+  variants   ProductVariant[]
+  images     ProductImage[]
+  orderItems OrderItem[]
+
+  @@index([status, availability, isHighlighted])
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id          String  @id @default(uuid()) @db.Uuid
+  productId   String  @db.Uuid
+  size        String  @db.VarChar(12) // 36, 38, P, M, G, U
+  color       String  @db.VarChar(40)
+  colorHex    String? @db.Char(7)
+  sku         String  @unique @db.VarChar(50)
+  stock       Int     @default(0)
+  /// Para aluguel: quantas peças físicas existem para reserva.
+  rentalStock Int     @default(0)
+  isActive    Boolean @default(true)
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@unique([productId, size, color])
+  @@index([productId, isActive])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id           String  @id @default(uuid()) @db.Uuid
+  productId    String  @db.Uuid
+  url          String
+  alt          String? @db.VarChar(160)
+  displayOrder Int     @default(0)
+  isCover      Boolean @default(false)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, displayOrder])
+  @@map("product_images")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PEDIDOS, PAGAMENTOS E LOGÍSTICA
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Order {
+  id     String      @id @default(uuid()) @db.Uuid
+  code   String      @unique @db.VarChar(14) // VK-2026-000123
+  userId String      @db.Uuid
+  type   OrderType   @default(SALE)
+  status OrderStatus @default(PENDING_PAYMENT)
+
+  // ── Snapshot do cálculo (RN-03). Nunca recalcular a partir de dados vivos. ──
+  subtotalCents          Int
+  couponDiscountCents    Int @default(0)
+  shippingCents          Int @default(0)
+  /// Preenchido só quando o plano usa IMMEDIATE_DISCOUNT.
+  immediateDiscountCents Int @default(0)
+  totalCents             Int
+  walletAppliedCents     Int @default(0)
+  gatewayAmountCents     Int @default(0)
+
+  // ── Abatimento (RN-02) ──
+  planRebatePercent   Decimal    @default(0) @db.Decimal(5, 2)
+  rebateMode          RebateMode @default(CREDIT_NEXT_INVOICE)
+  rebateEligible      Boolean    @default(false)
+  /// Motivo da inelegibilidade: WALLET_USED | NO_PLAN | PERCENT_COUPON | ZERO_BASE
+  rebateBlockedReason String?    @db.VarChar(40)
+  rebateCreditCents   Int        @default(0)
+
+  /// RN-12 — peça do trimestre. Preenchido quando este pedido usou o direito
+  /// de 1 aluguel sem custo no trimestre ("2026-Q3"). Pedido cancelado devolve
+  /// o direito: o serviço ignora CANCELED/REFUNDED ao conferir.
+  quarterlyRentalPeriod     String? @db.VarChar(7)
+  quarterlyRentalSavedCents Int     @default(0)
+
+  couponId      String? @db.Uuid
+  planIdAtOrder String? @db.Uuid
+  notes         String? @db.VarChar(500)
+
+  // ── Aluguel ──
+  rentalStartDate DateTime? @db.Date
+  rentalEndDate   DateTime? @db.Date
+  returnedAt      DateTime?
+
+  paidAt     DateTime?
+  canceledAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user            User                @relation(fields: [userId], references: [id])
+  coupon          Coupon?             @relation(fields: [couponId], references: [id])
+  items           OrderItem[]
+  payments        Payment[]
+  shipment        Shipment?
+  walletTxs       WalletTransaction[]
+  generatedCredit SubscriptionCredit?
+  tickets         Ticket[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([type, status])
+  @@index([userId, quarterlyRentalPeriod]) // RN-12: "já usou neste trimestre?"
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String  @id @default(uuid()) @db.Uuid
+  orderId      String  @db.Uuid
+  productId    String? @db.Uuid
+  variantId    String? @db.Uuid
+  ticketTypeId String? @db.Uuid
+  /// Snapshot: o pedido não muda se o catálogo mudar depois.
+  nameSnapshot   String    @db.VarChar(180)
+  skuSnapshot    String?   @db.VarChar(50)
+  sizeSnapshot   String?   @db.VarChar(12)
+  colorSnapshot  String?   @db.VarChar(40)
+  imageSnapshot  String?
+  kind           OrderType @default(SALE) // SALE | RENTAL | TICKET
+  quantity       Int       @default(1)
+  unitPriceCents Int
+  totalCents     Int
+
+  order      Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product?         @relation(fields: [productId], references: [id])
+  variant    ProductVariant?  @relation(fields: [variantId], references: [id])
+  ticketType EventTicketType? @relation(fields: [ticketTypeId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Payment {
+  id        String  @id @default(uuid()) @db.Uuid
+  orderId   String? @db.Uuid
+  invoiceId String? @db.Uuid
+  /// Recarga de carteira não tem pedido nem fatura: o dono fica aqui.
+  userId    String? @db.Uuid
+
+  method      PaymentMethod
+  status      PaymentStatus @default(PENDING)
+  amountCents Int
+  /// Identificadores do provedor — idempotência do webhook.
+  provider     String  @db.VarChar(40)
+  externalId   String? @db.VarChar(120)
+  pixQrCode    String? @db.Text
+  pixCopyPaste String? @db.Text
+  cardBrand    String? @db.VarChar(20)
+  cardLast4    String? @db.Char(4)
+  installments Int     @default(1)
+  /// RN-10 — conta recebedora usada na liquidação (referência, sem dado sensível).
+  recipientRef  String?   @db.VarChar(80)
+  failureReason String?   @db.VarChar(240)
+  paidAt        DateTime?
+  refundedAt    DateTime?
+  rawPayload    Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  order     Order?               @relation(fields: [orderId], references: [id])
+  invoice   SubscriptionInvoice? @relation(fields: [invoiceId], references: [id])
+  user      User?                @relation(fields: [userId], references: [id])
+  walletTxs WalletTransaction[]
+
+  @@unique([provider, externalId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
+model Coupon {
+  id          String     @id @default(uuid()) @db.Uuid
+  code        String     @unique @db.VarChar(30)
+  description String?    @db.VarChar(160)
+  type        CouponType
+  /// PERCENT: 10 = 10%. FIXED: centavos. FREE_SHIPPING: ignorado.
+  value            Decimal   @default(0) @db.Decimal(10, 2)
+  minSubtotalCents Int       @default(0)
+  minItems         Int       @default(0)
+  maxRedemptions   Int?
+  redemptions      Int       @default(0)
+  perUserLimit     Int       @default(1)
+  startsAt         DateTime?
+  endsAt           DateTime?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+
+  orders Order[]
+
+  @@index([isActive, endsAt])
+  @@map("coupons")
+}
+
+/// Regras de frete grátis configuráveis no CRM (RN-08).
+model ShippingRule {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String   @db.VarChar(80)
+  /// Frete grátis a partir deste subtotal (0 = ignora).
+  minSubtotalCents Int      @default(0)
+  /// Frete grátis a partir desta quantidade de peças (0 = ignora).
+  minItems         Int      @default(0)
+  /// Restringe a regra a estados específicos ([] = todos).
+  states           String[] @default([])
+
+  service   ShippingService?
+  isActive  Boolean          @default(true)
+  priority  Int              @default(0)
+  createdAt DateTime         @default(now())
+
+  @@index([isActive, priority])
+  @@map("shipping_rules")
+}
+
+model Shipment {
+  id            String          @id @default(uuid()) @db.Uuid
+  orderId       String          @unique @db.Uuid
+  addressId     String          @db.Uuid
+  service       ShippingService
+  quotedCents   Int
+  chargedCents  Int
+  estimatedDays Int?
+  trackingCode  String?         @db.VarChar(40)
+  labelUrl      String?
+  /// Declaração de conteúdo emitida automaticamente (3.6).
+  contentDeclarationUrl String?
+  declarationIssuedAt   DateTime?
+
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  address Address @relation(fields: [addressId], references: [id])
+
+  @@index([trackingCode])
+  @@map("shipments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTOS E INGRESSOS (2.4 / 3.4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Event {
+  id          String  @id @default(uuid()) @db.Uuid
+  title       String  @db.VarChar(160)
+  slug        String  @unique @db.VarChar(180)
+  description String? @db.Text
+  coverUrl    String?
+  /// Arte de fundo do ingresso (asset fornecido pela equipe).
+  ticketArtUrl String?
+
+  venueName    String?     @db.VarChar(160)
+  venueAddress String?     @db.VarChar(240)
+  startsAt     DateTime
+  endsAt       DateTime?
+  capacity     Int?
+  status       EventStatus @default(DRAFT)
+  /// Assinantes não pagam entrada (2.4). Falso só em evento fechado/pago para todos.
+  subscribersFree Boolean @default(true)
+  /// Habilita o bloco isolado de venda avulsa para não assinantes.
+  sellsPublicTickets Boolean @default(true)
+
+  rsvpDeadline DateTime?
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  ticketTypes EventTicketType[]
+  attendees   EventAttendee[]
+  tickets     Ticket[]
+
+  @@index([status, startsAt])
+  @@map("events")
+}
+
+model EventTicketType {
+  id         String    @id @default(uuid()) @db.Uuid
+  eventId    String    @db.Uuid
+  name       String    @db.VarChar(80) // "Inteira", "Pista", "Mesa"
+  priceCents Int
+  quantity   Int
+  sold       Int       @default(0)
+  salesStart DateTime?
+  salesEnd   DateTime?
+  isActive   Boolean   @default(true)
+
+  event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tickets    Ticket[]
+  orderItems OrderItem[]
+
+  @@index([eventId, isActive])
+  @@map("event_ticket_types")
+}
+
+/// Presença confirmada — origem da lista da portaria (3.4).
+model EventAttendee {
+  id      String       @id @default(uuid()) @db.Uuid
+  eventId String       @db.Uuid
+  userId  String?      @db.Uuid
+  kind    AttendeeKind
+  /// Não assinante avulso pode comprar sem conta: nome/doc ficam aqui.
+  guestName     String? @db.VarChar(160)
+  guestEmail    String? @db.VarChar(160)
+  guestPhone    String? @db.VarChar(20)
+  guestDocument String? @db.VarChar(20)
+
+  confirmedAt DateTime  @default(now())
+  canceledAt  DateTime?
+
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id])
+  tickets Ticket[]
+
+  @@unique([eventId, userId])
+  @@index([eventId, kind])
+  @@map("event_attendees")
+}
+
+model Ticket {
+  id           String  @id @default(uuid()) @db.Uuid
+  eventId      String  @db.Uuid
+  attendeeId   String  @db.Uuid
+  userId       String? @db.Uuid
+  ticketTypeId String? @db.Uuid
+  orderId      String? @db.Uuid
+  /// Código legível impresso no ingresso (10 caracteres, sem ambiguidade).
+  code      String @unique @db.VarChar(14)
+  /// Payload assinado (HMAC) lido pelo QR Code.
+  qrPayload String @unique @db.Text
+
+  kind        AttendeeKind
+  status      TicketStatus @default(VALID)
+  holderName  String       @db.VarChar(160)
+  usedAt      DateTime?
+  scannedById String?      @db.Uuid
+  createdAt   DateTime     @default(now())
+
+  event      Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  attendee   EventAttendee    @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
+  user       User?            @relation(fields: [userId], references: [id])
+  ticketType EventTicketType? @relation(fields: [ticketTypeId], references: [id])
+  order      Order?           @relation(fields: [orderId], references: [id])
+  scannedBy  User?            @relation("TicketScanner", fields: [scannedById], references: [id])
+
+  @@index([eventId, status])
+  @@map("tickets")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMUNIDADE (2.5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Post {
+  id      String     @id @default(uuid()) @db.Uuid
+  userId  String     @db.Uuid
+  content String     @db.VarChar(2000)
+  status  PostStatus @default(PUBLISHED)
+  /// Post oficial da casa aparece destacado no feed.
+  isOfficial   Boolean   @default(false)
+  likeCount    Int       @default(0)
+  commentCount Int       @default(0)
+  editedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media    PostMedia[]
+  comments Comment[]
+  likes    PostLike[]
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@map("posts")
+}
+
+model PostMedia {
+  id           String    @id @default(uuid()) @db.Uuid
+  postId       String    @db.Uuid
+  kind         MediaKind
+  url          String
+  thumbnailUrl String?
+  width        Int?
+  height       Int?
+  durationMs   Int?
+  displayOrder Int       @default(0)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, displayOrder])
+  @@map("post_media")
+}
+
+model Comment {
+  id       String  @id @default(uuid()) @db.Uuid
+  postId   String  @db.Uuid
+  userId   String  @db.Uuid
+  parentId String? @db.Uuid
+  /// Hiperlinks externos são permitidos e extraídos para `links`.
+  content  String     @db.VarChar(1000)
+  links    String[]   @default([])
+  status   PostStatus @default(PUBLISHED)
+  editedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([postId, createdAt])
+  @@map("comments")
+}
+
+model PostLike {
+  postId    String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@map("post_likes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODELOS (3.5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ModelProfile {
+  id           String    @id @default(uuid()) @db.Uuid
+  fullName     String    @db.VarChar(160)
+  birthDate    DateTime? @db.Date
+  ageAtSignup  Int?
+  email        String?   @db.VarChar(160)
+  phone        String?   @db.VarChar(20)
+  instagram    String?   @db.VarChar(60)
+  city         String?   @db.VarChar(80)
+  state        String?   @db.Char(2)
+  dressSize    String?   @db.VarChar(10) // manequim
+  shoeSize     String?   @db.VarChar(10)
+  heightCm     Int?
+  bustCm       Int?
+  waistCm      Int?
+  hipsCm       Int?
+  hairColor    String?   @db.VarChar(40)
+  eyeColor     String?   @db.VarChar(40)
+  portfolioUrl String?
+  photos       String[]  @default([])
+  isActive     Boolean   @default(true)
+  notes        String?   @db.VarChar(500)
+
+  /// Convite gerado no CRM: a equipe cria a ficha só com nome e contato, manda
+  /// o link pessoal, e a modelo completa o resto. O token é de uso único —
+  /// `completedAt` marca que o formulário voltou preenchido.
+  inviteToken String?   @unique @db.VarChar(64)
+  invitedAt   DateTime?
+  completedAt DateTime?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  application ModelApplication?
+
+  @@index([isActive, fullName])
+  @@map("model_profiles")
+}
+
+/// Candidatura vinda do formulário externo — cai direto no CRM.
+model ModelApplication {
+  id          String                 @id @default(uuid()) @db.Uuid
+  modelId     String?                @unique @db.Uuid
+  source      String                 @default("form") @db.VarChar(40) // form | google_forms | crm
+  payload     Json
+  status      ModelApplicationStatus @default(RECEIVED)
+  reviewNotes String?                @db.VarChar(500)
+  reviewedAt  DateTime?
+  createdAt   DateTime               @default(now())
+
+  model ModelProfile? @relation(fields: [modelId], references: [id])
+
+  @@index([status, createdAt])
+  @@map("model_applications")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUSH NOTIFICATIONS (3.7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Device {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @db.Uuid
+  token      String         @unique @db.VarChar(255) // Expo push token / FCM
+  platform   DevicePlatform
+  appVersion String?        @db.VarChar(20)
+  isActive   Boolean        @default(true)
+  lastSeenAt DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@map("devices")
+}
+
+model NotificationCampaign {
+  id      String              @id @default(uuid()) @db.Uuid
+  title   String              @db.VarChar(120)
+  body    String              @db.VarChar(400)
+  trigger NotificationTrigger @default(MANUAL)
+  status  NotificationStatus  @default(SCHEDULED)
+  /// Deep link no app: vkudaka://produto/<id>, vkudaka://evento/<id>...
+  deepLink String? @db.VarChar(200)
+  imageUrl String?
+  /// Segmentação: plano específico, apenas assinantes ativos, etc.
+  targetPlanId     String?  @db.Uuid
+  targetActiveOnly Boolean  @default(true)
+  scheduledFor     DateTime?
+  sentAt           DateTime?
+  totalTargets     Int      @default(0)
+  totalSent        Int      @default(0)
+  totalFailed      Int      @default(0)
+  createdById      String?  @db.Uuid
+  createdAt        DateTime @default(now())
+
+  targetPlan Plan?                  @relation(fields: [targetPlanId], references: [id])
+  deliveries NotificationDelivery[]
+
+  @@index([status, scheduledFor])
+  @@map("notification_campaigns")
+}
+
+model NotificationDelivery {
+  id          String    @id @default(uuid()) @db.Uuid
+  campaignId  String    @db.Uuid
+  userId      String    @db.Uuid
+  deviceToken String    @db.VarChar(255)
+  success     Boolean   @default(false)
+  error       String?   @db.VarChar(240)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  campaign NotificationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notification_deliveries")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTEÚDO EDITÁVEL E AUDITORIA
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Textos administrados pela diretoria sem deploy — ex.: regras de compra do popup (2.3).
+model AppContent {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(60) // "purchase_rules", "rental_rules", "welcome"
+  title       String?  @db.VarChar(160)
+  body        String   @db.Text
+  version     Int      @default(1)
+  isActive    Boolean  @default(true)
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("app_contents")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String?  @db.Uuid
+  action    String   @db.VarChar(80) // "plan.update", "wallet.adjust"
+  entity    String   @db.VarChar(60)
+  entityId  String?  @db.VarChar(60)
+  before    Json?
+  after     Json?
+  ip        String?  @db.VarChar(45)
+  createdAt DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

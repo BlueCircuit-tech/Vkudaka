@@ -1,0 +1,20 @@
+node_modules/
+dist/
+build/
+.expo/
+coverage/
+
+# Ambiente — nunca versionar segredo nem dado bancário (RN-10)
+.env
+.env.*
+!.env.example
+
+# Mídia enviada pelo CRM: conteúdo, não código. Em produção vai para o S3.
+backend/public/uploads/
+
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+backups/

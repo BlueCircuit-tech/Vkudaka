@@ -1,0 +1,151 @@
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
+
+/**
+ * Carrega o `.env` local sem dependência externa (Node >= 20.12).
+ * Em produção as variáveis vêm do orquestrador/secret manager e não há arquivo:
+ * a ausência é normal e não deve derrubar o boot aqui — quem valida é o schema
+ * abaixo.
+ */
+try {
+  process.loadEnvFile?.(fileURLToPath(new URL('../../.env', import.meta.url)));
+} catch {
+  /* sem arquivo .env: segue com as variáveis já presentes no ambiente */
+}
+
+/**
+ * Validação das variáveis de ambiente no boot. Falha rápido: é preferível o
+ * container não subir a descobrir em produção que o gateway está sem chave.
+ */
+const schema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().positive().default(3333),
+  API_PUBLIC_URL: z.string().url().default('http://localhost:3333'),
+
+  // RN-01 — destino do usuário sem assinatura
+  EXTERNAL_STORE_URL: z.string().url(),
+  CLUB_WHATSAPP_URL: z.string().url(),
+  CLUB_INSTAGRAM_URL: z.string().url(),
+
+  DATABASE_URL: z.string().min(1),
+
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET precisa de ao menos 32 caracteres'),
+  JWT_EXPIRES_IN: z.string().default('15m'),
+  REFRESH_EXPIRES_IN: z.string().default('30d'),
+  TICKET_HMAC_SECRET: z.string().min(16),
+
+  PAYMENT_PROVIDER: z.enum(['mock', 'mercadopago', 'pagarme', 'asaas']).default('mock'),
+  PAYMENT_API_KEY: z.string().optional(),
+  PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+
+  // RN-10 — conta recebedora. Obrigatória em produção.
+  PAYMENT_RECIPIENT_NAME: z.string().optional(),
+  PAYMENT_RECIPIENT_DOCUMENT: z.string().optional(),
+  PAYMENT_RECIPIENT_BANK: z.string().optional(),
+  PAYMENT_RECIPIENT_AGENCY: z.string().optional(),
+  PAYMENT_RECIPIENT_ACCOUNT: z.string().optional(),
+  PAYMENT_RECIPIENT_PIX_KEY: z.string().optional(),
+
+  CORREIOS_PROVIDER: z.enum(['mock', 'correios', 'melhorenvio']).default('mock'),
+  CORREIOS_USER: z.string().optional(),
+  CORREIOS_PASSWORD: z.string().optional(),
+  CORREIOS_ORIGIN_ZIP: z.string().length(8).default('01310100'),
+  LABEL_PROVIDER: z.enum(['mock', 'melhorenvio', 'nuvemshop']).default('mock'),
+
+  PUSH_PROVIDER: z.enum(['expo', 'fcm', 'mock']).default('mock'),
+  EXPO_ACCESS_TOKEN: z.string().optional(),
+
+  STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
+  S3_BUCKET: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+});
+
+const parsed = schema.safeParse(process.env);
+
+if (!parsed.success) {
+  console.error('✖ Variáveis de ambiente inválidas:');
+  console.error(parsed.error.flatten().fieldErrors);
+  process.exit(1);
+}
+
+export const env = parsed.data;
+
+const fail = (message: string): never => {
+  console.error(`✖ ${message}`);
+  process.exit(1);
+};
+
+/** RN-10 — em produção o dinheiro precisa ter para onde ir. */
+if (env.NODE_ENV === 'production') {
+  const missing = (
+    ['PAYMENT_RECIPIENT_NAME', 'PAYMENT_RECIPIENT_DOCUMENT', 'PAYMENT_RECIPIENT_PIX_KEY'] as const
+  ).filter((key) => !env[key]);
+  if (missing.length > 0) {
+    fail(`RN-10: conta recebedora não configurada (${missing.join(', ')})`);
+  }
+}
+
+/**
+ * Simulações não sobem fora de desenvolvimento.
+ *
+ * Cada `mock` responde "deu certo" sem falar com ninguém. Em homologação isso é
+ * pior do que uma falha: a equipe testa um fluxo que parece funcionar, aprova, e
+ * o problema aparece com dinheiro real na frente. Por isso a lista é conferida
+ * uma a uma e o boot para, dizendo qual variável está simulando o quê.
+ */
+const SIMULATED = [
+  ['PAYMENT_PROVIDER', env.PAYMENT_PROVIDER, 'cobrança de Pix e cartão'],
+  ['CORREIOS_PROVIDER', env.CORREIOS_PROVIDER, 'cotação de frete'],
+  ['LABEL_PROVIDER', env.LABEL_PROVIDER, 'etiqueta e declaração de conteúdo'],
+  ['PUSH_PROVIDER', env.PUSH_PROVIDER, 'envio de notificação'],
+] as const;
+
+const simulating = SIMULATED.filter(([, value]) => value === 'mock');
+
+if (env.NODE_ENV !== 'development' && simulating.length > 0) {
+  fail(
+    ['Provedores simulados não são permitidos fora de desenvolvimento:']
+      .concat(simulating.map(([key, , what]) => `   ${key}=mock — ${what}`))
+      .join('\n'),
+  );
+}
+
+/**
+ * Provedor real escolhido exige credencial. Falhar aqui é melhor do que
+ * descobrir na primeira cobrança que a chave nunca foi preenchida.
+ *
+ * Em desenvolvimento vira aviso: quem está escrevendo o adapter precisa subir o
+ * servidor antes de ter as chaves em mãos, e a cobrança já falha sozinha na
+ * chamada, com a mensagem certa.
+ */
+if (env.PAYMENT_PROVIDER !== 'mock') {
+  const missingCredentials = (
+    [
+      ['PAYMENT_API_KEY', env.PAYMENT_API_KEY],
+      ['PAYMENT_WEBHOOK_SECRET', env.PAYMENT_WEBHOOK_SECRET],
+    ] as const
+  )
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+
+  if (missingCredentials.length > 0) {
+    const message =
+      `PAYMENT_PROVIDER=${env.PAYMENT_PROVIDER} sem ${missingCredentials.join(' e ')}. ` +
+      'Sem o segredo do webhook não há como distinguir um aviso do gateway de um POST ' +
+      'forjado. Ver docs/INTEGRACOES.md § 1.';
+    if (env.NODE_ENV === 'development') console.warn(`⚠ ${message}`);
+    else fail(message);
+  }
+}
+
+if (simulating.length > 0) {
+  console.warn(
+    ['⚠ Desenvolvimento com provedor simulado:']
+      .concat(simulating.map(([key, , what]) => `   ${key}=mock — ${what} não acontece de verdade`))
+      .join('\n'),
+  );
+}
+
+export const isProd = env.NODE_ENV === 'production';

@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Clube VKUDAKA",
+    "slug": "clube-vkudaka",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "vkudaka",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAF7F3"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.vkudaka.clube",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Para publicar fotos na comunidade e definir sua foto de perfil.",
+        "NSCameraUsageDescription": "Para publicar fotos na comunidade."
+      }
+    },
+    "android": {
+      "package": "com.vkudaka.clube",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FAF7F3"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      "expo-notifications",
+      "expo-image-picker",
+      "expo-font"
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:3333"
+    },
+    "backgroundColor": "#FAF7F3"
+  }
+}
