@@ -1,4 +1,6 @@
-const BASE_URL = import.meta.env.DEV ? '/api' : (import.meta.env.VITE_API_URL as string);
+const BASE_URL = import.meta.env.DEV
+  ? '/api'
+  : ((import.meta.env.VITE_API_URL as string) ?? 'https://vkudaka-api.onrender.com');
 
 const TOKEN_KEY = 'vkudaka.crm.token';
 const REFRESH_KEY = 'vkudaka.crm.refresh';
