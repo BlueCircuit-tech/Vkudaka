@@ -18,3 +18,8 @@ Thumbs.db
 .idea/
 .vscode/
 backups/
+
+# segredos locais — nunca commitar
+vkudaka-secrets.md
+*.secrets.md
+.secrets*
