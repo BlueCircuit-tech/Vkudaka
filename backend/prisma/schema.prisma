@@ -13,8 +13,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrações usam conexão direta (session pooler); o app usa o pooler de
+  // transação. Em dev, aponte DIRECT_URL para o mesmo banco local.
+  directUrl = env("DIRECT_URL")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

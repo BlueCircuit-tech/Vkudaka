@@ -1,12 +1,9 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { Router, raw, type RequestHandler } from 'express';
-import { env } from '../../config/env.js';
 import { asyncHandler } from '../../lib/http.js';
 import { badRequest } from '../../lib/errors.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { requireActiveSubscriber } from '../../middleware/requireActiveSubscriber.js';
+import { saveMedia } from '../../integrations/storage/storage.js';
 
 /**
  * Upload de mídia.
@@ -37,12 +34,12 @@ const VIDEOS: Record<string, string> = {
 };
 
 const MB = 1024 * 1024;
-const UPLOAD_DIR = fileURLToPath(new URL('../../../public/uploads', import.meta.url));
 
 /**
  * Handler de gravação. O `raw()` já recusou o que passa do limite; aqui só
  * resta conferir o tipo e nomear o arquivo — o nome é sorteado para que o
- * nome original do aparelho não vire URL pública.
+ * nome original do aparelho não vire URL pública. O destino (disco ou S3) é
+ * resolvido por `saveMedia` conforme `STORAGE_PROVIDER`.
  */
 const store = (allowed: Record<string, string>): RequestHandler =>
   asyncHandler(async (req, res) => {
@@ -57,13 +54,10 @@ const store = (allowed: Record<string, string>): RequestHandler =>
       throw badRequest('EMPTY_FILE', 'Arquivo vazio.');
     }
 
-    await mkdir(UPLOAD_DIR, { recursive: true });
-
-    const filename = `${randomUUID()}.${extension}`;
-    await writeFile(`${UPLOAD_DIR}/${filename}`, req.body);
+    const { url } = await saveMedia(req.body, extension, contentType);
 
     res.status(201).json({
-      url: `${env.API_PUBLIC_URL}/media/uploads/${filename}`,
+      url,
       kind: contentType.startsWith('video/') ? 'VIDEO' : 'IMAGE',
       bytes: req.body.length,
     });

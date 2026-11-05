@@ -1,0 +1,103 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Blueprint de deploy da API do Clube VKUDAKA no Render.
+#
+# Banco: PostgreSQL gerenciado no Supabase (a DATABASE_URL é preenchida no
+# painel do Render). Mídia: Supabase Storage via modo S3 (STORAGE_PROVIDER=s3).
+#
+# Variáveis marcadas com `sync: false` NÃO ficam no git — o Render pede o valor
+# no primeiro deploy. As com `generateValue: true` o Render sorteia sozinho.
+#
+# Observação de boot: em NODE_ENV=production o backend recusa provedores `mock`
+# e exige as chaves de pagamento, de frete e os dados da conta recebedora
+# (RN-10). Para um deploy de teste antes de contratar gateway, use
+# NODE_ENV=development nas variáveis abaixo.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  - type: web
+    name: vkudaka-api
+    runtime: node
+    region: virginia
+    plan: starter
+    rootDir: .
+    # --include=dev: NODE_ENV=production faria o npm pular tsc/prisma (devDeps).
+    buildCommand: npm ci --include=dev && npx prisma generate --schema backend/prisma/schema.prisma && npm run build -w backend
+    # Migrações rodam depois do build e antes de ir ao ar.
+    preDeployCommand: npx prisma migrate deploy --schema backend/prisma/schema.prisma
+    startCommand: npm run start -w backend
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # O Render injeta PORT automaticamente; o servidor já lê de env.PORT.
+
+      # Segredos internos — gerados pelo Render.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TICKET_HMAC_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: REFRESH_EXPIRES_IN
+        value: 30d
+
+      # Banco (Supabase). DATABASE_URL = pooler de transação (app);
+      # DIRECT_URL = session pooler (migrações). Ambas coladas no painel.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+
+      # URL pública desta própria API (ex.: https://vkudaka-api.onrender.com).
+      - key: API_PUBLIC_URL
+        sync: false
+
+      # RN-01 — destinos do usuário sem assinatura.
+      - key: EXTERNAL_STORE_URL
+        sync: false
+      - key: CLUB_WHATSAPP_URL
+        sync: false
+      - key: CLUB_INSTAGRAM_URL
+        sync: false
+
+      # Mídia no Supabase Storage (bucket público "media").
+      - key: STORAGE_PROVIDER
+        value: supabase
+      - key: STORAGE_BUCKET
+        value: media
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # Push via Expo (app mobile).
+      - key: PUSH_PROVIDER
+        value: expo
+      - key: EXPO_ACCESS_TOKEN
+        sync: false
+
+      # Pagamento (Pix/cartão). Em produção não pode ser mock.
+      - key: PAYMENT_PROVIDER
+        sync: false
+      - key: PAYMENT_API_KEY
+        sync: false
+      - key: PAYMENT_WEBHOOK_SECRET
+        sync: false
+      - key: PAYMENT_RECIPIENT_NAME
+        sync: false
+      - key: PAYMENT_RECIPIENT_DOCUMENT
+        sync: false
+      - key: PAYMENT_RECIPIENT_PIX_KEY
+        sync: false
+
+      # Frete (Correios / Melhor Envio). Em produção não pode ser mock.
+      - key: CORREIOS_PROVIDER
+        sync: false
+      - key: CORREIOS_USER
+        sync: false
+      - key: CORREIOS_PASSWORD
+        sync: false
+      - key: CORREIOS_ORIGIN_ZIP
+        sync: false
+      - key: LABEL_PROVIDER
+        sync: false

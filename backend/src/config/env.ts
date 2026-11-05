@@ -55,11 +55,11 @@ const schema = z.object({
   PUSH_PROVIDER: z.enum(['expo', 'fcm', 'mock']).default('mock'),
   EXPO_ACCESS_TOKEN: z.string().optional(),
 
-  STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
-  S3_BUCKET: z.string().optional(),
-  S3_REGION: z.string().optional(),
-  S3_ACCESS_KEY_ID: z.string().optional(),
-  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  STORAGE_PROVIDER: z.enum(['local', 'supabase']).default('local'),
+  STORAGE_BUCKET: z.string().default('media'),
+  SUPABASE_URL: z.string().url().optional(),
+  // service_role: usada só no servidor para gravar no bucket. Nunca vai ao app.
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -84,6 +84,25 @@ if (env.NODE_ENV === 'production') {
   ).filter((key) => !env[key]);
   if (missing.length > 0) {
     fail(`RN-10: conta recebedora não configurada (${missing.join(', ')})`);
+  }
+}
+
+/**
+ * Modo Supabase exige URL e service_role. Sem elas o upload falha só na primeira
+ * foto enviada — melhor o boot parar e dizer o que falta.
+ */
+if (env.STORAGE_PROVIDER === 'supabase') {
+  const missingStorage = (
+    [
+      ['SUPABASE_URL', env.SUPABASE_URL],
+      ['SUPABASE_SERVICE_ROLE_KEY', env.SUPABASE_SERVICE_ROLE_KEY],
+    ] as const
+  )
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+
+  if (missingStorage.length > 0) {
+    fail(`STORAGE_PROVIDER=supabase sem ${missingStorage.join(', ')}.`);
   }
 }
 

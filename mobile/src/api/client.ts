@@ -2,7 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system';
 
-const BASE_URL = (Constants.expoConfig?.extra?.apiUrl as string) ?? 'http://localhost:3333';
+const BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ??
+  (Constants.expoConfig?.extra?.apiUrl as string) ??
+  'http://localhost:3333';
 
 const ACCESS_KEY = '@vkudaka/access';
 const REFRESH_KEY = '@vkudaka/refresh';

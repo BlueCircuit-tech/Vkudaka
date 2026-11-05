@@ -22,13 +22,15 @@
     },
     "android": {
       "package": "com.vkudaka.clube",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FAF7F3"
       },
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
@@ -37,8 +39,12 @@
       "expo-font"
     ],
     "extra": {
-      "apiUrl": "http://localhost:3333"
+      "apiUrl": "http://localhost:3333",
+      "eas": {
+        "projectId": "1cef58b1-31fb-4f3a-9ff8-5370339bc5c4"
+      }
     },
-    "backgroundColor": "#FAF7F3"
+    "backgroundColor": "#FAF7F3",
+    "owner": "rafa.martini300"
   }
 }
