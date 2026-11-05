@@ -23,3 +23,6 @@ backups/
 vkudaka-secrets.md
 *.secrets.md
 .secrets*
+.vercel
+.env*
+*.tsbuildinfo
