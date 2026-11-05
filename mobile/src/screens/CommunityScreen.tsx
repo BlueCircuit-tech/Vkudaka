@@ -13,10 +13,26 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { ResizeMode, Video } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { api, uploadMedia } from '../api/client';
 import { colors, radius, spacing, typography } from '../theme/theme';
 import { Body, Caption, Label, Loading, Screen } from '../components/ui';
+
+/** expo-video usa hook de player; encapsular permite usá-lo em lista e preview. */
+function CommunityVideo({
+  uri,
+  style,
+  loop = false,
+}: {
+  uri: string;
+  style: object;
+  loop?: boolean;
+}) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = loop;
+  });
+  return <VideoView player={player} style={style} nativeControls contentFit="cover" />;
+}
 
 /**
  * Comunidade (2.5) — feed entre assinantes.
@@ -103,7 +119,7 @@ export function CommunityScreen() {
 
   const pickMedia = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['images', 'videos'],
       quality: 0.8,
       videoMaxDuration: 60,
     });
@@ -239,12 +255,7 @@ export function CommunityScreen() {
             {draftMedia ? (
               <View>
                 {draftMedia.kind === 'VIDEO' ? (
-                  <Video
-                    source={{ uri: draftMedia.uri }}
-                    style={styles.preview}
-                    resizeMode={ResizeMode.COVER}
-                    useNativeControls
-                  />
+                  <CommunityVideo uri={draftMedia.uri} style={styles.preview} />
                 ) : (
                   <Image source={{ uri: draftMedia.uri }} style={styles.preview} />
                 )}
@@ -315,14 +326,7 @@ export function CommunityScreen() {
 
             {item.media.map((media) =>
               media.kind === 'VIDEO' ? (
-                <Video
-                  key={media.id}
-                  source={{ uri: media.url }}
-                  style={styles.media}
-                  resizeMode={ResizeMode.COVER}
-                  useNativeControls
-                  isLooping
-                />
+                <CommunityVideo key={media.id} uri={media.url} style={styles.media} loop />
               ) : (
                 <Image key={media.id} source={{ uri: media.url }} style={styles.media} />
               ),

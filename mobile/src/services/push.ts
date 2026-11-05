@@ -19,7 +19,8 @@ import { colors } from '../theme/theme';
 /** Aviso recebido com o app aberto também aparece — senão passa despercebido. */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: false,
     shouldSetBadge: false,
   }),
