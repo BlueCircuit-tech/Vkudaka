@@ -21,7 +21,7 @@ export interface DeclarationRequest {
 }
 
 export interface DeclarationResult {
-  declarationUrl: string;
+  declarationUrl: string | null;
   labelUrl: string | null;
   trackingCode: string | null;
   provider: string;
@@ -50,5 +50,16 @@ const externalProvider: LabelProvider = {
   },
 };
 
+/** Sem emissão de declaração/etiqueta: o pedido segue sem documento gerado. */
+const noneProvider: LabelProvider = {
+  async issue() {
+    return { declarationUrl: null, labelUrl: null, trackingCode: null, provider: 'none' };
+  },
+};
+
 export const labelProvider: LabelProvider =
-  env.LABEL_PROVIDER === 'mock' ? mockProvider : externalProvider;
+  env.LABEL_PROVIDER === 'none'
+    ? noneProvider
+    : env.LABEL_PROVIDER === 'mock'
+      ? mockProvider
+      : externalProvider;

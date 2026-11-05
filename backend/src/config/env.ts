@@ -46,11 +46,11 @@ const schema = z.object({
   PAYMENT_RECIPIENT_ACCOUNT: z.string().optional(),
   PAYMENT_RECIPIENT_PIX_KEY: z.string().optional(),
 
-  CORREIOS_PROVIDER: z.enum(['mock', 'correios', 'melhorenvio']).default('mock'),
+  CORREIOS_PROVIDER: z.enum(['mock', 'table', 'correios', 'melhorenvio']).default('mock'),
   CORREIOS_USER: z.string().optional(),
   CORREIOS_PASSWORD: z.string().optional(),
   CORREIOS_ORIGIN_ZIP: z.string().length(8).default('01310100'),
-  LABEL_PROVIDER: z.enum(['mock', 'melhorenvio', 'nuvemshop']).default('mock'),
+  LABEL_PROVIDER: z.enum(['mock', 'none', 'melhorenvio', 'nuvemshop']).default('mock'),
 
   PUSH_PROVIDER: z.enum(['expo', 'fcm', 'mock']).default('mock'),
   EXPO_ACCESS_TOKEN: z.string().optional(),

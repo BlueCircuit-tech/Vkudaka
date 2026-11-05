@@ -27,10 +27,12 @@ export interface FreightProvider {
 }
 
 /**
- * Tabela aproximada para desenvolvimento e testes: preço por faixa de peso e
- * por região de destino (primeiro dígito do CEP). Substituída em produção.
+ * Estimativa por CEP: preço por faixa de peso e por região de destino
+ * (primeiro dígito do CEP). Usada quando CORREIOS_PROVIDER='table' (produção
+ * sem contrato) ou 'mock' (desenvolvimento). Não chama serviço externo nem
+ * depende de etiqueta — apenas calcula o valor do frete.
  */
-const mockProvider: FreightProvider = {
+const tableProvider: FreightProvider = {
   async quote(request) {
     const region = Number(request.destinationZip[0] ?? '0');
     const base = request.service === 'SEDEX' ? 2800 : 1800;
@@ -61,4 +63,6 @@ const correiosProvider: FreightProvider = {
 };
 
 export const freightProvider: FreightProvider =
-  env.CORREIOS_PROVIDER === 'mock' ? mockProvider : correiosProvider;
+  env.CORREIOS_PROVIDER === 'correios' || env.CORREIOS_PROVIDER === 'melhorenvio'
+    ? correiosProvider
+    : tableProvider;
