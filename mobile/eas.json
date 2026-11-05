@@ -28,6 +28,14 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://vkudaka-api.onrender.com"
       }
+    },
+    "ios-sim": {
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://vkudaka-api.onrender.com"
+      }
     }
   },
   "submit": {
