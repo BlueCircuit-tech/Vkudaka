@@ -1,5 +1,8 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { env } from '../../config/env.js';
+import { AppError } from '../../lib/errors.js';
+import { createMercadoPagoProvider } from './mercadopago.js';
+import { getPaymentConfig, type EffectivePaymentConfig } from './settings.js';
 
 /**
  * Gateway de pagamento (2.6 / RN-10).
@@ -9,9 +12,14 @@ import { env } from '../../config/env.js';
  *   • trocar por StoreKit/Play Billing na publicação (fase 6) sem mexer no
  *     checkout, apenas registrando outro provider.
  *
- * RN-10 — todo recebimento é roteado para a conta recebedora configurada em
- * PAYMENT_RECIPIENT_*. O identificador da conta viaja como `recipientRef`;
- * dados bancários nunca são versionados nem trafegam pela API do app.
+ * RN-10 — todo recebimento é roteado para a conta recebedora configurada na
+ * tela "Pagamentos" do CRM (ou em PAYMENT_RECIPIENT_*). O identificador da
+ * conta viaja como `recipientRef`; dados bancários nunca são versionados nem
+ * trafegam pela API do app.
+ *
+ * O provedor é resolvido a cada cobrança (`getPaymentProvider()`), porque a
+ * diretoria pode colar as credenciais no CRM com o servidor no ar — e os dois
+ * apps passam a cobrar de verdade sem deploy.
  */
 
 export type ChargeMethod = 'PIX' | 'CREDIT_CARD';
@@ -47,17 +55,28 @@ export interface WebhookEvent {
   raw: unknown;
 }
 
+/** Tudo o que um webhook traz: corpo bruto, cabeçalhos e query string. */
+export interface WebhookContext {
+  rawBody: string;
+  headers: Record<string, string | string[] | undefined>;
+  query: Record<string, unknown>;
+}
+
 export interface PaymentProvider {
   readonly name: string;
   charge(request: ChargeRequest): Promise<ChargeResult>;
   refund(externalId: string, amountCents: number): Promise<void>;
-  /** Valida a assinatura do webhook e normaliza o evento. */
-  parseWebhook(rawBody: string, signature: string | undefined): WebhookEvent;
+  /**
+   * Valida a assinatura do webhook e normaliza o evento. Assinatura inválida
+   * lança; `null` significa "aviso legítimo, mas sem nada a processar"
+   * (ex.: pagamento ainda pendente, ou tópico que não é pagamento).
+   */
+  parseWebhook(ctx: WebhookContext): Promise<WebhookEvent | null>;
 }
 
 /** Referência opaca da conta recebedora — o suficiente para auditoria. */
-export function recipientRef(): string {
-  const doc = env.PAYMENT_RECIPIENT_DOCUMENT;
+export function recipientRef(document?: string): string {
+  const doc = document ?? env.PAYMENT_RECIPIENT_DOCUMENT;
   if (!doc) return 'recipient:unset';
   return `recipient:${doc.slice(0, 3)}***${doc.slice(-2)}`;
 }
@@ -93,7 +112,7 @@ const mockProvider: PaymentProvider = {
     /* no-op no mock */
   },
 
-  parseWebhook(rawBody) {
+  async parseWebhook({ rawBody }) {
     const body = JSON.parse(rawBody) as { externalId: string; status: WebhookEvent['status'] };
     return { externalId: body.externalId, status: body.status, paidAt: new Date(), raw: body };
   },
@@ -123,23 +142,9 @@ export function verifySignature(rawBody: string, signatureHex: string | undefine
 }
 
 /**
- * Provedores reais: o encaixe está pronto, a implementação é a etapa seguinte.
- *
- * O que cada adapter precisa entregar, além de falar com a API do parceiro:
- *
- *   charge()        recebe valor em centavos e, no cartão, apenas `cardToken` —
- *                   o backend nunca vê o número. Devolve `externalId` (a chave
- *                   que o webhook usará para reencontrar o pagamento), o status
- *                   normalizado e, no Pix, o copia-e-cola.
- *   refund()        estorno parcial ou total, em centavos.
- *   parseWebhook()  valida a assinatura com `verifySignature` (ou o esquema
- *                   próprio do parceiro) e normaliza o evento. Assinatura
- *                   inválida deve lançar — nunca devolver um evento.
- *   recipientRef    RN-10: toda cobrança é roteada para a conta recebedora
- *                   configurada em PAYMENT_RECIPIENT_*.
- *
- * Enquanto não existir, qualquer tentativa de cobrar falha aqui, alto e claro,
- * em vez de simular uma aprovação que não houve.
+ * Provedores sem adapter ainda (Pagar.me, Asaas): o encaixe está pronto, a
+ * implementação é a etapa seguinte. Enquanto não existir, qualquer tentativa de
+ * cobrar falha aqui, alto e claro, em vez de simular uma aprovação que não houve.
  */
 const pendingIntegration = (name: string): PaymentProvider => {
   const missing = (method: string) =>
@@ -157,16 +162,60 @@ const pendingIntegration = (name: string): PaymentProvider => {
     async refund() {
       throw missing('refund');
     },
-    parseWebhook() {
+    async parseWebhook() {
       throw missing('parseWebhook');
     },
   };
 };
 
+/** Nada configurado: o app recebe um motivo que a diretoria entende. */
+const unconfigured = (problem?: string): PaymentProvider => {
+  const error = () =>
+    new AppError(
+      503,
+      'PAYMENT_NOT_CONFIGURED',
+      problem ??
+        'Pagamento ainda não configurado. Acesse CRM › Pagamentos, cole as credenciais do Mercado Pago e salve.',
+    );
+  return {
+    name: 'none',
+    async charge() {
+      throw error();
+    },
+    async refund() {
+      throw error();
+    },
+    async parseWebhook() {
+      throw error();
+    },
+  };
+};
+
+function buildProvider(config: EffectivePaymentConfig): PaymentProvider {
+  switch (config.provider) {
+    case 'mock':
+      return mockProvider;
+    case 'mercadopago':
+      return createMercadoPagoProvider({
+        accessToken: config.accessToken ?? '',
+        publicKey: config.publicKey,
+        webhookSecret: config.webhookSecret,
+        notificationUrl: `${env.API_PUBLIC_URL}/webhooks/payments`,
+        recipientRef: recipientRef(config.recipient.document),
+      });
+    case 'pagarme':
+    case 'asaas':
+      return pendingIntegration(config.provider);
+    default:
+      return unconfigured(config.problem);
+  }
+}
+
 /**
- * O `mock` só é alcançável quando alguém pedir explicitamente em
+ * Provedor efetivo neste instante. O `mock` só é alcançável em
  * desenvolvimento — `config/env.ts` derruba o boot se ele aparecer em qualquer
- * outro ambiente.
+ * outro ambiente, e `settings.ts` só cai nele sem nada configurado em dev.
  */
-export const paymentProvider: PaymentProvider =
-  env.PAYMENT_PROVIDER === 'mock' ? mockProvider : pendingIntegration(env.PAYMENT_PROVIDER);
+export async function getPaymentProvider(): Promise<PaymentProvider> {
+  return buildProvider(await getPaymentConfig());
+}

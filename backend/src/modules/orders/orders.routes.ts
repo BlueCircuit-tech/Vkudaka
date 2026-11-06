@@ -7,7 +7,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireActiveSubscriber } from '../../middleware/requireActiveSubscriber.js';
 import { validate } from '../../middleware/validate.js';
 import { buildQuote, createOrder, settleOrder } from './orders.service.js';
-import { paymentProvider } from '../../integrations/payments/gateway.js';
+import { getPaymentProvider } from '../../integrations/payments/gateway.js';
 
 export const ordersRouter: Router = Router();
 
@@ -85,6 +85,7 @@ ordersRouter.post(
     // Diferença a pagar no gateway ("inteirar o valor" — 2.6).
     let payment = null;
     if (quote.gatewayAmountCents > 0) {
+      const paymentProvider = await getPaymentProvider();
       const charge = await paymentProvider.charge({
         orderId: order.id,
         amountCents: quote.gatewayAmountCents,

@@ -7,7 +7,7 @@ import { authenticate, requireRole } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { attendanceListPdf, cancelRsvp, issueTicket, rsvp, scanTicket } from './events.service.js';
 import { getActiveSubscription } from '../subscriptions/subscriptions.service.js';
-import { paymentProvider } from '../../integrations/payments/gateway.js';
+import { getPaymentProvider } from '../../integrations/payments/gateway.js';
 import { orderCode } from '../../lib/codes.js';
 import { settleOrder } from '../orders/orders.service.js';
 
@@ -218,6 +218,7 @@ eventsRouter.post(
       return { order, tickets, totalCents };
     });
 
+    const paymentProvider = await getPaymentProvider();
     const charge = await paymentProvider.charge({
       orderId: result.order.id,
       amountCents: result.totalCents,

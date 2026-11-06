@@ -1137,6 +1137,30 @@ model AppContent {
   @@map("app_contents")
 }
 
+/// Gateway de pagamento configurado pela diretoria no CRM (tela "Pagamentos").
+/// Linha única (id = "default"). Vale para o app iOS e Android ao mesmo tempo,
+/// porque quem cobra é o backend. Segredos ficam cifrados em repouso
+/// (`lib/secrets.ts`); a chave pública do Mercado Pago não é segredo.
+model PaymentSettings {
+  id                String   @id @default("default") @db.VarChar(20)
+  provider          String   @default("mercadopago") @db.VarChar(40)
+  isEnabled         Boolean  @default(false)
+  /// Cartão exige tokenização no app (SDK do gateway); enquanto não existir, só Pix.
+  acceptCard        Boolean  @default(false)
+  publicKey         String?  @db.VarChar(120)
+  accessTokenEnc    String?  @db.Text
+  webhookSecretEnc  String?  @db.Text
+  /// RN-10 — conta recebedora. Só o necessário para auditoria e declaração de conteúdo.
+  recipientName     String?  @db.VarChar(160)
+  recipientDocument String?  @db.VarChar(14)
+  recipientPixKey   String?  @db.VarChar(120)
+  updatedById       String?  @db.Uuid
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("payment_settings")
+}
+
 model AuditLog {
   id        String   @id @default(uuid()) @db.Uuid
   actorId   String?  @db.Uuid

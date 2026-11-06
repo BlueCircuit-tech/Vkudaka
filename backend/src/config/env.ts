@@ -34,9 +34,16 @@ const schema = z.object({
   REFRESH_EXPIRES_IN: z.string().default('30d'),
   TICKET_HMAC_SECRET: z.string().min(16),
 
-  PAYMENT_PROVIDER: z.enum(['mock', 'mercadopago', 'pagarme', 'asaas']).default('mock'),
+  /**
+   * `crm` (padrão): o gateway é configurado pela diretoria na tela
+   * "Pagamentos" do CRM e lido do banco — sem variável de ambiente, sem deploy.
+   * Os demais valores mantêm o caminho antigo, por ambiente.
+   */
+  PAYMENT_PROVIDER: z.enum(['crm', 'mock', 'mercadopago', 'pagarme', 'asaas']).default('crm'),
   PAYMENT_API_KEY: z.string().optional(),
   PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+  /** Cifra os segredos salvos pelo CRM. Na falta, deriva do JWT_SECRET. */
+  SETTINGS_ENCRYPTION_KEY: z.string().min(16).optional(),
 
   // RN-10 — conta recebedora. Obrigatória em produção.
   PAYMENT_RECIPIENT_NAME: z.string().optional(),
@@ -77,8 +84,13 @@ const fail = (message: string): never => {
   process.exit(1);
 };
 
-/** RN-10 — em produção o dinheiro precisa ter para onde ir. */
-if (env.NODE_ENV === 'production') {
+/**
+ * RN-10 — em produção o dinheiro precisa ter para onde ir.
+ * Com PAYMENT_PROVIDER=crm a conta recebedora é preenchida (e validada) na
+ * tela "Pagamentos" do CRM; o boot não tem como conferir sem o banco, e a
+ * cobrança já recusa sozinha enquanto a tela não estiver completa.
+ */
+if (env.NODE_ENV === 'production' && env.PAYMENT_PROVIDER !== 'crm') {
   const missing = (
     ['PAYMENT_RECIPIENT_NAME', 'PAYMENT_RECIPIENT_DOCUMENT', 'PAYMENT_RECIPIENT_PIX_KEY'] as const
   ).filter((key) => !env[key]);
@@ -139,7 +151,7 @@ if (env.NODE_ENV !== 'development' && simulating.length > 0) {
  * servidor antes de ter as chaves em mãos, e a cobrança já falha sozinha na
  * chamada, com a mensagem certa.
  */
-if (env.PAYMENT_PROVIDER !== 'mock') {
+if (env.PAYMENT_PROVIDER !== 'mock' && env.PAYMENT_PROVIDER !== 'crm') {
   const missingCredentials = (
     [
       ['PAYMENT_API_KEY', env.PAYMENT_API_KEY],

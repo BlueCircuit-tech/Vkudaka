@@ -7,6 +7,7 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import { api } from '../api/client';
+import { usePaymentMethods } from '../api/payments';
 import { colors, formatBRL, radius, spacing, typography, fonts } from '../theme/theme';
 import { Body, Button, Caption, Card, Label, Loading, Screen } from '../components/ui';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -47,6 +48,7 @@ export function CheckoutScreen() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'CREDIT_CARD'>('PIX');
+  const availableMethods = usePaymentMethods();
 
   const items = [{ kind: mode, variantId, quantity: 1 }];
 
@@ -214,7 +216,7 @@ export function CheckoutScreen() {
         <Card>
           <Label>Pagamento</Label>
           <View style={styles.methods}>
-            {(['PIX', 'CREDIT_CARD'] as const).map((method) => (
+            {availableMethods.map((method) => (
               <Pressable
                 key={method}
                 onPress={() => setPaymentMethod(method)}

@@ -8,7 +8,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import * as wallet from '../../domain/wallet/wallet.service.js';
 import * as credits from '../../domain/credits/credits.service.js';
-import { paymentProvider } from '../../integrations/payments/gateway.js';
+import { getPaymentProvider } from '../../integrations/payments/gateway.js';
 import { notifyTrigger } from '../notifications/notifications.service.js';
 
 /**
@@ -81,6 +81,7 @@ walletRouter.post(
     };
     const user = await prisma.user.findUniqueOrThrow({ where: { id: req.auth!.userId } });
 
+    const paymentProvider = await getPaymentProvider();
     const charge = await paymentProvider.charge({
       amountCents: body.amountCents,
       method: body.method,

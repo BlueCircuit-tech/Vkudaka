@@ -13,6 +13,7 @@ import {
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import QRCode from 'react-native-qrcode-svg';
 import { api } from '../api/client';
+import { usePaymentMethods } from '../api/payments';
 import { colors, formatBRL, fonts, radius, spacing, typography } from '../theme/theme';
 import { Body, Button, Caption, Card, Label, Screen } from '../components/ui';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -63,6 +64,7 @@ export function TopUpScreen() {
     suggested ? (suggested / 100).toFixed(2).replace('.', ',') : '',
   );
   const [method, setMethod] = useState<Method>('PIX');
+  const availableMethods = usePaymentMethods();
   const [busy, setBusy] = useState(false);
   const [charge, setCharge] = useState<TopUp | null>(null);
   const [balanceCents, setBalanceCents] = useState<number | null>(null);
@@ -248,7 +250,7 @@ export function TopUpScreen() {
         <Card style={{ gap: spacing(1) }}>
           <Label>Forma de pagamento</Label>
           <View style={styles.methods}>
-            {(['PIX', 'CREDIT_CARD'] as const).map((option) => (
+            {availableMethods.map((option) => (
               <Pressable
                 key={option}
                 onPress={() => setMethod(option)}

@@ -12,6 +12,7 @@ import { ShippingPage } from './pages/ShippingPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { ContentPage } from './pages/ContentPage';
 import { OrdersPage } from './pages/OrdersPage';
+import { PaymentsPage } from './pages/PaymentsPage';
 import { ModelApplyPage } from './pages/ModelApplyPage';
 
 /** Estrutura do painel CRM (3.1 a 3.7). */
@@ -49,6 +50,10 @@ const NAV: Array<{ group: string; items: Array<{ to: string; label: string; end?
       { to: '/modelos', label: 'Modelos' },
       { to: '/logistica', label: 'Logística e fretes' },
     ],
+  },
+  {
+    group: 'Financeiro',
+    items: [{ to: '/pagamentos', label: 'Pagamentos (Mercado Pago)' }],
   },
   {
     group: 'Comunicação',
@@ -126,6 +131,7 @@ export function App() {
         <Route path="/eventos" element={<Protected><EventsPage /></Protected>} />
         <Route path="/modelos" element={<Protected><ModelsPage /></Protected>} />
         <Route path="/logistica" element={<Protected><ShippingPage /></Protected>} />
+        <Route path="/pagamentos" element={<Protected><PaymentsPage /></Protected>} />
         <Route path="/push" element={<Protected><NotificationsPage /></Protected>} />
         <Route path="/conteudo" element={<Protected><ContentPage /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />

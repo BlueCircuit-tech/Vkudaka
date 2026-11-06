@@ -21,6 +21,8 @@ import { adminRouter } from './modules/admin/admin.routes.js';
 import { adminCatalogRouter } from './modules/admin/admin.catalog.routes.js';
 import { uploadsRouter } from './modules/admin/uploads.routes.js';
 import { shippingRouter } from './modules/shipping/shipping.routes.js';
+import { paymentsRouter } from './modules/payments/payments.routes.js';
+import { adminPaymentsRouter } from './modules/admin/admin.payments.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -71,10 +73,12 @@ export function createApp(): Express {
   app.use('/models', modelsRouter);
   app.use('/content', contentRouter);
   app.use('/shipping', shippingRouter);
+  app.use('/payments', paymentsRouter);
 
   // CRM
   app.use('/admin', adminRouter);
   app.use('/admin', adminCatalogRouter);
+  app.use('/admin', adminPaymentsRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Rota não encontrada.' });

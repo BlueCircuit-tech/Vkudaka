@@ -6,51 +6,58 @@ outro adapter e mudar uma variável de ambiente.
 
 ---
 
-## 1. Gateway de pagamento — Pix e cartão
+## 1. Gateway de pagamento — Mercado Pago (Pix e cartão)
 
-`integrations/payments/gateway.ts` · `PAYMENT_PROVIDER`
+`integrations/payments/gateway.ts` · `integrations/payments/mercadopago.ts` ·
+`integrations/payments/settings.ts` · `PAYMENT_PROVIDER`
 
 Interface: `charge()`, `refund()`, `parseWebhook()`.
 
 | Provedor | Situação |
 |---|---|
-| `mercadopago` \| `pagarme` \| `asaas` | encaixe pronto — **implementação é a etapa seguinte** |
+| `mercadopago` | **implementado** (API de Pagamentos / Checkout Transparente, sem SDK, via `fetch`) |
+| `pagarme` \| `asaas` | encaixe pronto — implementação é a etapa seguinte |
 | `mock` | apenas desenvolvimento; o boot recusa em qualquer outro ambiente |
 
-### Nada simula pagamento fora de desenvolvimento
+### Configurado pelo CRM, não pelo código
 
-Três travas, todas em código:
+A tela **CRM › Financeiro › Pagamentos** (`/pagamentos`, só ADMIN) traz o passo a passo do painel
+do Mercado Pago e um formulário com Access Token, Public Key, assinatura secreta do webhook e a
+conta recebedora (RN-10). Ao salvar:
 
-* `config/env.ts` derruba o boot se `PAYMENT_PROVIDER=mock` (ou qualquer outro `mock`)
-  aparecer com `NODE_ENV` diferente de `development`, dizendo qual variável está simulando o quê.
-* Escolher um provedor real sem `PAYMENT_API_KEY` e `PAYMENT_WEBHOOK_SECRET` também derruba o
-  boot fora de desenvolvimento — dentro dele vira aviso, para conseguir programar o adapter
-  antes das chaves chegarem.
-* Enquanto o adapter não existir, `charge()`, `refund()` e `parseWebhook()` lançam com a
-  mensagem do que falta. Nenhuma cobrança é dada como aprovada por engano.
+* os segredos vão para a tabela `payment_settings` cifrados (AES-256-GCM, `lib/secrets.ts`, chave
+  derivada de `SETTINGS_ENCRYPTION_KEY` ou, na falta, de `JWT_SECRET`);
+* `settings.ts` invalida o cache e a **próxima cobrança já usa o novo valor** — sem deploy, sem
+  variável de ambiente, e vale para iOS e Android ao mesmo tempo porque quem cobra é o servidor;
+* `GET /payments/methods` (público) passa a anunciar `["PIX"]` (ou `["PIX","CREDIT_CARD"]` se a
+  diretoria marcar cartão); o app só mostra os botões que o servidor anuncia.
 
-### O que precisamos do gateway contratado
+Ordem de precedência em `settings.ts`: CRM ativo → variáveis `PAYMENT_*` (quando
+`PAYMENT_PROVIDER` não é `crm`) → `mock` (só desenvolvimento) → nada configurado (toda cobrança
+responde `503 PAYMENT_NOT_CONFIGURED` com a mensagem “acesse CRM › Pagamentos”).
 
-1. Chave de API do ambiente de produção → `PAYMENT_API_KEY`.
-2. Segredo de assinatura de webhook → `PAYMENT_WEBHOOK_SECRET`.
-3. Dados da conta recebedora da Valéria (RN-10) → `PAYMENT_RECIPIENT_*`. Nunca versionados;
-   entram só no ambiente de produção.
-4. URL de webhook registrada no painel do provedor: `POST {API_PUBLIC_URL}/webhooks/payments`.
-5. Credencial de tokenização do cartão para o app (chave pública do SDK).
+`PAYMENT_PROVIDER=crm` é o padrão. Em produção ele dispensa `PAYMENT_API_KEY`,
+`PAYMENT_WEBHOOK_SECRET` e `PAYMENT_RECIPIENT_*` no ambiente — a validação acontece ao salvar a
+tela (não dá para ativar sem token, assinatura e conta recebedora completos).
 
-### O que o adapter precisa entregar
+### Cartão
 
-| Método | Contrato |
-|---|---|
-| `charge()` | recebe centavos e, no cartão, apenas `cardToken` — o backend nunca vê o número, e não pode entrar no escopo PCI. Devolve `externalId` (chave que o webhook usa para reencontrar o pagamento), status normalizado e, no Pix, o copia-e-cola |
-| `refund()` | estorno parcial ou total, em centavos |
-| `parseWebhook()` | valida a assinatura sobre o **corpo bruto** e normaliza o evento. Assinatura inválida deve lançar, nunca devolver evento |
-| `recipientRef` | RN-10 — referência opaca da conta recebedora, gravada em cada pagamento para auditoria |
+O app **não** tokeniza cartão (não há SDK do Mercado Pago embarcado). Por isso o padrão é só Pix:
+`charge()` com `CREDIT_CARD` sem `cardToken` responde `400 CARD_NOT_AVAILABLE`. Quando o SDK
+entrar no app, basta marcar “Oferecer cartão” no CRM: o adapter já cobra com `token` +
+`installments` + bandeira obtida por BIN.
 
-Para assinatura HMAC-SHA256 (formato mais comum), use `verifySignature()` do próprio
-`gateway.ts`: compara em tempo constante e trata comprimento diferente como falha. Provedores
-com esquema próprio (Mercado Pago usa `ts` + `v1` no cabeçalho `x-signature`) montam a string
-de acordo com a documentação e chamam a mesma função no final.
+### Webhook do Mercado Pago
+
+URL a cadastrar no painel (Webhooks → Modo produção → evento *Pagamentos*):
+`POST {API_PUBLIC_URL}/webhooks/payments`. O CRM mostra a URL pronta com botão de copiar.
+
+A assinatura vem no cabeçalho `x-signature` (`ts=…,v1=…`) e é o HMAC-SHA256, com a “assinatura
+secreta” do painel, do texto `id:{data.id};request-id:{x-request-id};ts:{ts};` (partes ausentes
+saem; `data.id` alfanumérico vai em minúsculas). O aviso não traz o status: após validar, o adapter
+consulta `GET /v1/payments/{id}` e normaliza (`approved`→PAID, `rejected|cancelled`→FAILED,
+`refunded`→REFUNDED, `charged_back`→CHARGEBACK; pendentes são ignorados com 200). O aviso de
+teste do painel (id inexistente) responde 200 sem casar com nada.
 
 A rota `/webhooks/payments` é registrada antes do `express.json()` para preservar os bytes
 originais, e recusa com **401** qualquer requisição sem cabeçalho de assinatura fora de
@@ -64,11 +71,12 @@ existência de um `WalletTransaction` do tipo `TOPUP` para o mesmo `paymentId`.
 
 ### Como conferir depois de integrar
 
-1. Cobrança Pix de valor baixo → `Payment` criado como `PENDING` com copia-e-cola.
-2. Pagar → o webhook chega assinado, `Payment` vira `PAID` e o saldo entra uma única vez.
-3. Reenviar o mesmo webhook → nada muda (idempotência).
-4. Enviar um webhook sem assinatura → **401**.
-5. `GET /wallet/integrity` → `ok: true`.
+1. CRM › Pagamentos → **Testar conexão** mostra a conta dona do token.
+2. Recarga Pix de valor baixo no app → `Payment` criado como `PENDING` com copia-e-cola do MP.
+3. Pagar → o webhook chega assinado, `Payment` vira `PAID` e o saldo entra uma única vez.
+4. Reenviar o mesmo webhook → nada muda (idempotência).
+5. Enviar um webhook sem assinatura → **401**.
+6. `GET /wallet/integrity` → `ok: true`.
 
 ---
 

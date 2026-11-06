@@ -7,10 +7,11 @@
 # Variáveis marcadas com `sync: false` NÃO ficam no git — o Render pede o valor
 # no primeiro deploy. As com `generateValue: true` o Render sorteia sozinho.
 #
-# Observação de boot: em NODE_ENV=production o backend recusa provedores `mock`
-# e exige as chaves de pagamento, de frete e os dados da conta recebedora
-# (RN-10). Para um deploy de teste antes de contratar gateway, use
-# NODE_ENV=development nas variáveis abaixo.
+# Observação de boot: em NODE_ENV=production o backend recusa provedores `mock`.
+# Pagamento: com PAYMENT_PROVIDER=crm (padrão) as credenciais do Mercado Pago e
+# a conta recebedora (RN-10) são preenchidas na tela CRM › Pagamentos, sem
+# variável de ambiente. Frete: CORREIOS_PROVIDER=table e LABEL_PROVIDER=none
+# valem em produção.
 # ─────────────────────────────────────────────────────────────────────────────
 services:
   - type: web
@@ -76,19 +77,13 @@ services:
       - key: EXPO_ACCESS_TOKEN
         sync: false
 
-      # Pagamento (Pix/cartão). Em produção não pode ser mock.
+      # Pagamento (Pix/cartão): configurado pela diretoria em CRM › Pagamentos.
       - key: PAYMENT_PROVIDER
-        sync: false
-      - key: PAYMENT_API_KEY
-        sync: false
-      - key: PAYMENT_WEBHOOK_SECRET
-        sync: false
-      - key: PAYMENT_RECIPIENT_NAME
-        sync: false
-      - key: PAYMENT_RECIPIENT_DOCUMENT
-        sync: false
-      - key: PAYMENT_RECIPIENT_PIX_KEY
-        sync: false
+        value: crm
+      # Cifra os segredos salvos pelo CRM. Trocar invalida o que está salvo
+      # (o CRM avisa e basta colar as credenciais de novo).
+      - key: SETTINGS_ENCRYPTION_KEY
+        generateValue: true
 
       # Frete (Correios / Melhor Envio). Em produção não pode ser mock.
       - key: CORREIOS_PROVIDER

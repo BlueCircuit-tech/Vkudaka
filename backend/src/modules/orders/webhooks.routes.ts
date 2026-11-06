@@ -1,7 +1,8 @@
 import { Router, raw } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { asyncHandler } from '../../lib/http.js';
-import { paymentProvider } from '../../integrations/payments/gateway.js';
+import { getPaymentProvider } from '../../integrations/payments/gateway.js';
+import { getPaymentConfig } from '../../integrations/payments/settings.js';
 import { labelProvider } from '../../integrations/labels/declaration.js';
 import { env } from '../../config/env.js';
 import { creditTopUp } from '../wallet/wallet.routes.js';
@@ -36,7 +37,16 @@ webhooksRouter.post(
       return;
     }
 
-    const event = paymentProvider.parseWebhook(rawBody, signature);
+    const paymentProvider = await getPaymentProvider();
+    const event = await paymentProvider.parseWebhook({
+      rawBody,
+      headers: req.headers,
+      query: req.query as Record<string, unknown>,
+    });
+    if (!event) {
+      res.status(200).json({ received: true, ignored: true });
+      return;
+    }
 
     const payment = await prisma.payment.findFirst({
       where: { provider: paymentProvider.name, externalId: event.externalId },
@@ -105,11 +115,12 @@ async function issueDeclarationIfNeeded(orderId: string): Promise<void> {
   if (!shipment || shipment.declarationIssuedAt) return;
 
   try {
+    const { recipient } = await getPaymentConfig();
     const result = await labelProvider.issue({
       orderCode: shipment.order.code,
       sender: {
-        name: env.PAYMENT_RECIPIENT_NAME ?? 'VKUDAKA',
-        document: env.PAYMENT_RECIPIENT_DOCUMENT ?? '',
+        name: recipient.name ?? 'VKUDAKA',
+        document: recipient.document ?? '',
         address: 'Endereço de origem configurado no ambiente',
         zipCode: env.CORREIOS_ORIGIN_ZIP,
       },
