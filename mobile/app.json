@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "com.vkudaka.clube",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FAF7F3"
