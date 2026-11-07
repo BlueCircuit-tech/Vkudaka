@@ -15,6 +15,7 @@ import { webhooksRouter } from './modules/orders/webhooks.routes.js';
 import { walletRouter } from './modules/wallet/wallet.routes.js';
 import { eventsRouter } from './modules/events/events.routes.js';
 import { communityRouter } from './modules/community/community.routes.js';
+import { moderationRouter } from './modules/community/moderation.routes.js';
 import { modelsRouter } from './modules/models/models.routes.js';
 import { contentRouter } from './modules/content/content.routes.js';
 import { adminRouter } from './modules/admin/admin.routes.js';
@@ -23,6 +24,7 @@ import { uploadsRouter } from './modules/admin/uploads.routes.js';
 import { shippingRouter } from './modules/shipping/shipping.routes.js';
 import { paymentsRouter } from './modules/payments/payments.routes.js';
 import { adminPaymentsRouter } from './modules/admin/admin.payments.routes.js';
+import { adminModerationRouter } from './modules/admin/admin.moderation.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -70,6 +72,7 @@ export function createApp(): Express {
   app.use('/wallet', walletRouter);
   app.use('/events', eventsRouter);
   app.use('/community', communityRouter);
+  app.use('/community', moderationRouter);
   app.use('/models', modelsRouter);
   app.use('/content', contentRouter);
   app.use('/shipping', shippingRouter);
@@ -79,6 +82,7 @@ export function createApp(): Express {
   app.use('/admin', adminRouter);
   app.use('/admin', adminCatalogRouter);
   app.use('/admin', adminPaymentsRouter);
+  app.use('/admin', adminModerationRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Rota não encontrada.' });

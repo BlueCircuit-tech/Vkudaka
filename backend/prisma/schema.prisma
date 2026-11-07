@@ -181,6 +181,29 @@ enum PostStatus {
   DELETED  // soft delete pelo autor
 }
 
+/// Denúncia de conteúdo da comunidade (exigência da política de UGC do Google Play).
+enum ReportTargetType {
+  POST
+  COMMENT
+  USER
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT   // assédio, ofensa
+  NUDITY
+  VIOLENCE
+  HATE         // discurso de ódio
+  SCAM         // golpe, venda enganosa
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED   // conteúdo ocultado ou conta bloqueada
+  DISMISSED  // analisada e mantida
+}
+
 enum MediaKind {
   IMAGE
   VIDEO
@@ -262,6 +285,10 @@ model User {
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]             @relation("AuditActor")
   ticketScans   Ticket[]               @relation("TicketScanner")
+  reportsMade     ContentReport[] @relation("ReportReporter")
+  reportsResolved ContentReport[] @relation("ReportResolver")
+  blocksMade      UserBlock[]     @relation("BlockBlocker")
+  blocksReceived  UserBlock[]     @relation("BlockBlocked")
 
   @@index([status, role])
   @@index([createdAt])
@@ -992,6 +1019,48 @@ model PostLike {
 
   @@id([postId, userId])
   @@map("post_likes")
+}
+
+/// Denúncia feita por um membro sobre post, comentário ou outro membro.
+/// Uma por (denunciante, alvo): denunciar de novo não duplica, só atualiza o motivo.
+/// A fila é tratada no CRM (Clube › Denúncias).
+model ContentReport {
+  id         String           @id @default(uuid()) @db.Uuid
+  reporterId String           @db.Uuid
+  targetType ReportTargetType
+  targetId   String           @db.Uuid
+  reason     ReportReason
+  details    String?          @db.VarChar(500)
+  status     ReportStatus     @default(OPEN)
+  /// "HIDDEN" | "USER_BLOCKED" | "DISMISSED" — o que a moderação fez.
+  resolution   String?   @db.VarChar(20)
+  resolvedById String?   @db.Uuid
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  reporter   User  @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolvedBy User? @relation("ReportResolver", fields: [resolvedById], references: [id])
+
+  @@unique([reporterId, targetType, targetId])
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@map("content_reports")
+}
+
+/// Bloqueio entre membros: quem bloqueia deixa de ver posts e comentários do
+/// bloqueado, e vice-versa. Não afeta a conta (isso é `User.status`).
+model UserBlock {
+  blockerId String   @db.Uuid
+  blockedId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  blocker User @relation("BlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("user_blocks")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

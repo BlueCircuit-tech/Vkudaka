@@ -15,8 +15,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { api, uploadMedia } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { colors, radius, spacing, typography } from '../theme/theme';
 import { Body, Caption, Label, Loading, Screen } from '../components/ui';
+import { ReportSheet, type ReportTarget } from '../components/ReportSheet';
 
 /** expo-video usa hook de player; encapsular permite usá-lo em lista e preview. */
 function CommunityVideo({
@@ -69,6 +71,7 @@ interface Comment {
   content: string;
   links: string[];
   createdAt: string;
+  isMine: boolean;
   user: { id: string; fullName: string; avatarUrl: string | null };
 }
 
@@ -92,7 +95,9 @@ const mimeOf = (uri: string, kind: 'IMAGE' | 'VIDEO') => {
 };
 
 export function CommunityScreen() {
+  const { user: me } = useAuth();
   const [posts, setPosts] = useState<Post[] | null>(null);
+  const [reporting, setReporting] = useState<ReportTarget | null>(null);
   const [draft, setDraft] = useState('');
   const [draftMedia, setDraftMedia] = useState<{ uri: string; kind: 'IMAGE' | 'VIDEO' } | null>(null);
   const [publishing, setPublishing] = useState(false);
@@ -193,6 +198,49 @@ export function CommunityScreen() {
           await load();
         },
       },
+    ]);
+  };
+
+  // ── Denunciar e bloquear (política de conteúdo de usuários das lojas) ──────
+
+  const blockAuthor = (author: Post['user']) => {
+    Alert.alert(
+      `Bloquear ${author.fullName}?`,
+      'Vocês deixam de ver as publicações e os comentários um do outro. Dá para desfazer no seu perfil.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Bloquear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.post(`/community/users/${author.id}/block`);
+              setOpenComments(null);
+              await load();
+            } catch (error) {
+              Alert.alert('Não foi possível bloquear', (error as Error).message);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  /** Menu "⋯" de publicação de outro membro. */
+  const postMenu = (post: Post) => {
+    Alert.alert(post.user.fullName, undefined, [
+      { text: 'Denunciar publicação', onPress: () => setReporting({ kind: 'post', id: post.id }) },
+      { text: 'Bloquear membro', style: 'destructive', onPress: () => blockAuthor(post.user) },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
+
+  /** Menu de comentário de outro membro. */
+  const commentMenu = (comment: Comment) => {
+    Alert.alert(comment.user.fullName, undefined, [
+      { text: 'Denunciar comentário', onPress: () => setReporting({ kind: 'comment', id: comment.id }) },
+      { text: 'Bloquear membro', style: 'destructive', onPress: () => blockAuthor(comment.user) },
+      { text: 'Cancelar', style: 'cancel' },
     ]);
   };
 
@@ -299,6 +347,16 @@ export function CommunityScreen() {
                 </Caption>
               </View>
               {item.isOfficial ? <Label>Casa VKUDAKA</Label> : null}
+              {!item.isMine ? (
+                <Pressable
+                  onPress={() => postMenu(item)}
+                  hitSlop={12}
+                  accessibilityLabel="Mais opções"
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.more}>⋯</Text>
+                </Pressable>
+              ) : null}
             </View>
 
             {editing === item.id ? (
@@ -362,9 +420,14 @@ export function CommunityScreen() {
                       <Caption>
                         {comment.user.fullName} · {formatWhen(comment.createdAt)}
                       </Caption>
-                      {comment.user.id === item.user.id || item.isMine ? (
+                      {comment.isMine || item.isMine ? (
                         <Pressable onPress={() => removeComment(item.id, comment)}>
                           <Text style={styles.commentDelete}>Apagar</Text>
+                        </Pressable>
+                      ) : null}
+                      {!comment.isMine && comment.user.id !== me?.id ? (
+                        <Pressable onPress={() => commentMenu(comment)} hitSlop={12} accessibilityLabel="Mais opções">
+                          <Text style={styles.commentDelete}>Denunciar</Text>
                         </Pressable>
                       ) : null}
                     </View>
@@ -398,6 +461,7 @@ export function CommunityScreen() {
           </View>
         )}
       />
+      <ReportSheet target={reporting} onClose={() => setReporting(null)} />
     </Screen>
   );
 }
@@ -454,6 +518,7 @@ const styles = StyleSheet.create({
     gap: spacing(1),
   },
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5) },
+  more: { color: colors.muted, fontSize: 22, lineHeight: 24, paddingHorizontal: spacing(0.5) },
   author: { ...typography.body, fontWeight: '600' },
   avatar: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
   avatarFallback: {

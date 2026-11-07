@@ -6,6 +6,7 @@ import { forbidden, notFound } from '../../lib/errors.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireActiveSubscriber } from '../../middleware/requireActiveSubscriber.js';
 import { validate } from '../../middleware/validate.js';
+import { hiddenUserIdsFor } from './moderation.service.js';
 
 /**
  * Comunidade (2.5) — feed entre assinantes.
@@ -30,7 +31,9 @@ communityRouter.get(
   requireActiveSubscriber,
   asyncHandler(async (req, res) => {
     const { page, perPage, skip, take } = paginate(req.query);
-    const where = { status: 'PUBLISHED' as const, deletedAt: null };
+    // Bloqueios somem do feed nos dois sentidos (moderation.service.ts).
+    const hidden = await hiddenUserIdsFor(req.auth!.userId);
+    const where = { status: 'PUBLISHED' as const, deletedAt: null, userId: { notIn: hidden } };
 
     const [posts, total] = await Promise.all([
       prisma.post.findMany({
@@ -176,12 +179,13 @@ communityRouter.get(
   authenticate,
   requireActiveSubscriber,
   asyncHandler(async (req, res) => {
+    const hidden = await hiddenUserIdsFor(req.auth!.userId);
     const comments = await prisma.comment.findMany({
-      where: { postId: param(req, 'id'), status: 'PUBLISHED', deletedAt: null },
+      where: { postId: param(req, 'id'), status: 'PUBLISHED', deletedAt: null, userId: { notIn: hidden } },
       include: { user: { select: authorSelect } },
       orderBy: { createdAt: 'asc' },
     });
-    res.json(comments);
+    res.json(comments.map((comment) => ({ ...comment, isMine: comment.userId === req.auth!.userId })));
   }),
 );
 

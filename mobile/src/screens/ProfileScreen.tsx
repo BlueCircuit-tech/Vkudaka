@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -354,6 +354,9 @@ export function ProfileScreen() {
         </View>
 
         <Divider />
+        <BlockedMembers />
+
+        <Divider />
         <Button title="Sair da conta" variant="quiet" onPress={() => void signOut()} />
       </ScrollView>
     </Screen>
@@ -456,3 +459,52 @@ const styles = StyleSheet.create({
   },
   inputTall: { height: 84, paddingTop: spacing(1), textAlignVertical: 'top' },
 });
+
+/**
+ * Membros bloqueados na comunidade. Bloquear acontece no feed; desfazer é aqui,
+ * para que o bloqueio nunca seja uma porta sem volta.
+ */
+function BlockedMembers() {
+  const [blocked, setBlocked] = useState<Array<{ user: { id: string; fullName: string } }> | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setBlocked(await api.get<Array<{ user: { id: string; fullName: string } }>>('/community/blocks'));
+    } catch {
+      setBlocked([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const unblock = (id: string, name: string) => {
+    Alert.alert(`Desbloquear ${name}?`, 'Vocês voltam a ver as publicações um do outro.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Desbloquear',
+        onPress: async () => {
+          await api.delete(`/community/users/${id}/block`);
+          await load();
+        },
+      },
+    ]);
+  };
+
+  return (
+    <View style={{ gap: spacing(1) }}>
+      <Label>Membros bloqueados</Label>
+      {!blocked || blocked.length === 0 ? (
+        <Caption>Ninguém bloqueado. Para bloquear alguém, use o menu ⋯ de uma publicação na Comunidade.</Caption>
+      ) : (
+        blocked.map((item) => (
+          <Card key={item.user.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Body>{item.user.fullName}</Body>
+            <Button title="Desbloquear" variant="quiet" onPress={() => unblock(item.user.id, item.user.fullName)} />
+          </Card>
+        ))
+      )}
+    </View>
+  );
+}

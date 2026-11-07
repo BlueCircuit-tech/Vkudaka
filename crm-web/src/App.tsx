@@ -4,6 +4,7 @@ import { session } from './api/client';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { UsersPage } from './pages/UsersPage';
+import { ModerationPage } from './pages/ModerationPage';
 import { PlansPage } from './pages/PlansPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { EventsPage } from './pages/EventsPage';
@@ -40,6 +41,7 @@ const NAV: Array<{ group: string; items: Array<{ to: string; label: string; end?
     items: [
       { to: '/planos', label: 'Planos e descontos' },
       { to: '/usuarios', label: 'Assinantes' },
+      { to: '/moderacao', label: 'Denúncias' },
     ],
   },
   {
@@ -127,6 +129,7 @@ export function App() {
         <Route path="/pedidos" element={<Protected><OrdersPage /></Protected>} />
         <Route path="/planos" element={<Protected><PlansPage /></Protected>} />
         <Route path="/usuarios" element={<Protected><UsersPage /></Protected>} />
+        <Route path="/moderacao" element={<Protected><ModerationPage /></Protected>} />
         <Route path="/produtos" element={<Protected><ProductsPage /></Protected>} />
         <Route path="/eventos" element={<Protected><EventsPage /></Protected>} />
         <Route path="/modelos" element={<Protected><ModelsPage /></Protected>} />
