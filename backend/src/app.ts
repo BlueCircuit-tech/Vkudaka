@@ -8,6 +8,7 @@ import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { usersRouter } from './modules/users/users.routes.js';
+import { accountDeletionRouter } from './modules/users/account-deletion.routes.js';
 import { plansRouter } from './modules/plans/plans.routes.js';
 import { catalogRouter } from './modules/catalog/catalog.routes.js';
 import { ordersRouter } from './modules/orders/orders.routes.js';
@@ -66,6 +67,7 @@ export function createApp(): Express {
 
   app.use('/auth', authRouter);
   app.use('/users', usersRouter);
+  app.use('/users', accountDeletionRouter);
   app.use('/plans', plansRouter);
   app.use('/catalog', catalogRouter);
   app.use('/orders', ordersRouter);

@@ -25,6 +25,8 @@ interface AuthState {
   signIn: (identifier: string, password: string) => Promise<void>;
   signUp: (payload: Record<string, unknown>) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Conta já encerrada no servidor: só limpa o aparelho, sem chamar a API. */
+  forgetSession: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -86,9 +88,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const forgetSession = useCallback(async () => {
+    await tokens.clear();
+    setUser(null);
+  }, []);
+
   const value = useMemo(
-    () => ({ user, loading, signIn, signUp, signOut, refresh }),
-    [user, loading, signIn, signUp, signOut, refresh],
+    () => ({ user, loading, signIn, signUp, signOut, forgetSession, refresh }),
+    [user, loading, signIn, signUp, signOut, forgetSession, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -88,7 +89,7 @@ const BODY_FIELDS = [
 type Draft = Record<string, string>;
 
 export function ProfileScreen() {
-  const { signOut, refresh } = useAuth();
+  const { signOut, forgetSession, refresh } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [colorsDraft, setColorsDraft] = useState('');
@@ -358,6 +359,7 @@ export function ProfileScreen() {
 
         <Divider />
         <Button title="Sair da conta" variant="quiet" onPress={() => void signOut()} />
+        <DeleteAccount onDeleted={forgetSession} />
       </ScrollView>
     </Screen>
   );
@@ -508,3 +510,75 @@ function BlockedMembers() {
     </View>
   );
 }
+
+/**
+ * Exclusão da conta pelo próprio membro (exigência do Google Play e da LGPD).
+ * Pede a senha para confirmar; o servidor anonimiza na hora e derruba a sessão.
+ */
+function DeleteAccount({ onDeleted }: { onDeleted: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const confirm = async () => {
+    if (!password) return;
+    setBusy(true);
+    try {
+      await api.post('/users/me/delete', { password });
+      setOpen(false);
+      await onDeleted();
+      Alert.alert('Conta excluída', 'Seus dados pessoais foram removidos. Sentiremos sua falta.');
+    } catch (error) {
+      Alert.alert('Não foi possível excluir', (error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Pressable onPress={() => setOpen(true)} style={{ alignSelf: 'center', paddingVertical: spacing(1) }}>
+        <Text style={{ ...typography.caption, color: colors.mutedSoft, textDecorationLine: 'underline' }}>
+          Excluir minha conta
+        </Text>
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <View style={deleteStyles.backdrop}>
+          <Card style={deleteStyles.box}>
+            <Text style={typography.title}>Excluir conta</Text>
+            <Body>
+              Seus dados pessoais (nome, e-mail, CPF, telefone, endereços, medidas, foto) são removidos
+              na hora, a assinatura é cancelada e suas publicações saem da comunidade. Registros de
+              pedidos e pagamentos ficam guardados pelo prazo legal, sem seus dados de contato.
+            </Body>
+            <Body>Esta ação não pode ser desfeita. Digite sua senha para confirmar.</Body>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Senha"
+              placeholderTextColor={colors.mutedSoft}
+              secureTextEntry
+              style={deleteStyles.input}
+            />
+            <Button title="Excluir definitivamente" onPress={() => void confirm()} disabled={!password} loading={busy} />
+            <Button title="Cancelar" variant="quiet" onPress={() => setOpen(false)} />
+          </Card>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+const deleteStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(20, 18, 16, 0.4)', justifyContent: 'center', padding: spacing(2.5) },
+  box: { gap: spacing(1.5) },
+  input: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    color: colors.ink,
+    padding: spacing(1.5),
+  },
+});
