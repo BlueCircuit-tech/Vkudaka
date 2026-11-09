@@ -588,6 +588,79 @@ label {
   accent-color: var(--gold-deep);
 }
 
+/* Grades de tamanho (PP–G1, 36–46) e cores da peça */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.chips-label {
+  font-size: 10.5px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  min-width: 78px;
+}
+.chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12.5px;
+  min-width: 42px;
+}
+.chip:hover {
+  border-color: var(--gold);
+}
+.chip.on {
+  background: var(--gold-wash);
+  border-color: var(--gold);
+  color: var(--gold-deep);
+  font-weight: 600;
+}
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.color-row > input[type='text'],
+.color-row > input:not([type]) {
+  flex: 1;
+}
+.swatch-input {
+  width: 34px !important;
+  height: 34px;
+  padding: 2px;
+  flex: 0 0 34px !important;
+  min-width: 0 !important;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+}
+.color-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  display: inline-block;
+}
+.add-variant {
+  margin-bottom: 10px;
+}
+.add-variant .field {
+  margin-bottom: 0;
+}
+
 .tabs {
   display: flex;
   gap: 26px;

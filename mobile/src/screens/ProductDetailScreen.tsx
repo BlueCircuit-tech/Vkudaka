@@ -20,6 +20,7 @@ interface Variant {
   id: string;
   size: string;
   color: string;
+  colorHex?: string | null;
   stock: number;
   rentalStock: number;
 }
@@ -72,6 +73,8 @@ export function ProductDetailScreen() {
       ),
     [product, mode],
   );
+  // Peça com mais de uma cor: o chip precisa dizer qual é, senão aparecem dois "38".
+  const multiColor = new Set((product?.variants ?? []).map((v) => v.color)).size > 1;
 
   if (!product) return <Loading />;
 
@@ -124,7 +127,7 @@ export function ProductDetailScreen() {
         ) : null}
 
         <View style={styles.block}>
-          <Label>Tamanho</Label>
+          <Label>{multiColor ? 'Tamanho e cor' : 'Tamanho'}</Label>
           <View style={styles.sizes}>
             {availableVariants.map((variant) => {
               const selected = variant.id === selectedVariant;
@@ -134,8 +137,11 @@ export function ProductDetailScreen() {
                   onPress={() => setSelectedVariant(variant.id)}
                   style={[styles.size, selected && styles.sizeSelected]}
                 >
+                  {multiColor && variant.colorHex ? (
+                    <View style={[styles.swatch, { backgroundColor: variant.colorHex }]} />
+                  ) : null}
                   <Text style={[styles.sizeText, selected && { color: colors.ink }]}>
-                    {variant.size}
+                    {multiColor ? `${variant.size} · ${variant.color}` : variant.size}
                   </Text>
                 </Pressable>
               );
@@ -185,12 +191,15 @@ const styles = StyleSheet.create({
     minWidth: 52,
     paddingVertical: spacing(1),
     paddingHorizontal: spacing(1.5),
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
   sizeSelected: { backgroundColor: colors.gold, borderColor: colors.gold },
+  swatch: { width: 10, height: 10, borderRadius: 5, marginRight: 6, borderWidth: 1, borderColor: 'rgba(0,0,0,0.15)' },
   sizeText: { ...typography.body, fontSize: 14 },
   footer: {
     padding: spacing(2.5),
