@@ -17,8 +17,10 @@
       "bundleIdentifier": "com.vkudaka.clube",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Para publicar fotos na comunidade e definir sua foto de perfil.",
-        "NSCameraUsageDescription": "Para publicar fotos na comunidade."
-      }
+        "NSCameraUsageDescription": "Para publicar fotos na comunidade.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.vkudaka.clube",
