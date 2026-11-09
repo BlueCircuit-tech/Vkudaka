@@ -20,7 +20,7 @@
         "NSCameraUsageDescription": "Para publicar fotos na comunidade.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "1"
+      "buildNumber": "2"
     },
     "android": {
       "package": "com.vkudaka.clube",
