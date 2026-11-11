@@ -12,6 +12,7 @@ import {
   type QuoteItem,
   type QuoteResult,
 } from '../../domain/pricing/pricing.js';
+import { salePriceAt } from '../../domain/pricing/promo.js';
 import * as wallet from '../../domain/wallet/wallet.service.js';
 import * as credits from '../../domain/credits/credits.service.js';
 import { getRebateSettings, quarterlyRentalStatus } from '../subscriptions/subscriptions.service.js';
@@ -131,7 +132,9 @@ async function resolveItems(tx: Tx, items: CheckoutItemInput[]): Promise<Resolve
       );
     }
 
-    const unitPriceCents = isRental ? product.rentalPriceCents : product.salePriceCents;
+    // Venda usa o preço que vale agora: o promocional, se a promoção estiver ativa.
+    const sale = salePriceAt(product, new Date());
+    const unitPriceCents = isRental ? product.rentalPriceCents : sale.priceCents;
     if (unitPriceCents === null || unitPriceCents === undefined) {
       throw conflict('PRICE_MISSING', `"${product.name}" está sem preço cadastrado.`);
     }
@@ -149,6 +152,8 @@ async function resolveItems(tx: Tx, items: CheckoutItemInput[]): Promise<Resolve
         quantity: item.quantity,
         // RN-12: aluguel sempre paga frete, mesmo em peça marcada frete grátis.
         freeShipping: isRental ? false : product.freeShipping,
+        // Peça em promoção não recebe o abatimento do plano.
+        noRebate: !isRental && sale.promoActive,
         reference: variant.id,
       },
       snapshot: {

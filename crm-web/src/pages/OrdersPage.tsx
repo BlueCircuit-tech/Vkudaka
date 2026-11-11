@@ -36,6 +36,7 @@ const BLOCK_LABEL: Record<string, string> = {
   NO_PLAN: 'sem plano ativo',
   PERCENT_COUPON: 'cupom percentual',
   ZERO_BASE: 'base zero',
+  PROMO_ITEMS: 'peça em promoção',
 };
 
 export function OrdersPage() {

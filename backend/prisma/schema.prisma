@@ -88,6 +88,7 @@ enum WalletTxType {
   REFUND            // estorno de pedido
   ADJUSTMENT_CREDIT // ajuste manual do CRM (+)
   ADJUSTMENT_DEBIT  // ajuste manual do CRM (−)
+  SUBSCRIPTION      // mensalidade paga: 100% vira crédito VKUDAKA (2026-11-11)
 }
 
 /// Define onde a peça aparece no app. Aluguel fica em segundo plano na vitrine.
@@ -366,13 +367,20 @@ model Plan {
   slug          String          @unique @db.VarChar(60)
   description   String?         @db.VarChar(500)
   priceCents    Int // ex.: 9900 = R$ 99,00
+  /// Preço "de" exibido riscado (ex.: 11900 em "de R$ 119 por R$ 99"). Nulo = sem riscado.
+  compareAtPriceCents Int?
+  /// Selo da condição de preço (ex.: "Preço Black Friday").
+  promoLabel    String?         @db.VarChar(40)
+  /// Selo de destaque (ex.: "Mais popular"). Plano com selo aparece em destaque no app.
+  highlightLabel String?        @db.VarChar(40)
   interval      BillingInterval @default(MONTHLY)
   intervalCount Int             @default(1)
 
   /// RN-02 — percentual de abatimento do nível (10 = 10%).
   rebatePercent Decimal    @default(0) @db.Decimal(5, 2)
-  /// RN-02 — como o percentual é aplicado. Padrão: crédito na próxima mensalidade.
-  rebateMode    RebateMode @default(CREDIT_NEXT_INVOICE)
+  /// RN-02 — como o percentual é aplicado. Padrão desde 2026-11-11: desconto
+  /// fidelidade na hora da compra (a mensalidade inteira já vira crédito).
+  rebateMode    RebateMode @default(IMMEDIATE_DISCOUNT)
 
   isActive     Boolean  @default(true)
   displayOrder Int      @default(0)
@@ -394,6 +402,10 @@ model PlanBenefit {
   description  String? @db.VarChar(300)
   icon         String? @db.VarChar(40)
   displayOrder Int     @default(0)
+  /// Linha da tabela comparativa do app (ex.: "Desconto fidelidade"). Nulo = fora da tabela.
+  compareLabel String? @db.VarChar(60)
+  /// Valor na tabela (ex.: "15%"). Nulo = ✓.
+  compareValue String? @db.VarChar(20)
 
   plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
@@ -570,6 +582,11 @@ model Product {
 
   salePriceCents     Int? // obrigatório quando availability ∈ {SALE, BOTH}
   rentalPriceCents   Int? // obrigatório quando availability ∈ {RENTAL, BOTH}
+  /// Valor promocional de VENDA (menor que salePriceCents). Vale entre as datas,
+  /// se houver. Peça em promoção não recebe o abatimento do plano.
+  promoPriceCents    Int?
+  promoStartsAt      DateTime?
+  promoEndsAt        DateTime?
   rentalDays         Int  @default(4)
   /// Caução do aluguel, se houver.
   rentalDepositCents Int?

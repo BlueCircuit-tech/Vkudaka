@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { api } from '../api/client';
-import { colors, radius, spacing, typography } from '../theme/theme';
-import { Body, Caption, Loading, Screen } from '../components/ui';
+import { spacing, typography } from '../theme/theme';
+import { Caption, Loading, Screen } from '../components/ui';
 import { ProductGrid, type ProductSummary, type QuarterlyRental } from '../components/ProductGrid';
+import { QuarterlyNotice } from '../components/QuarterlyNotice';
 
 /**
  * Aluguel (2.3) — seção própria, em segundo plano. Só se chega aqui pela
@@ -29,8 +30,6 @@ export function RentalScreen() {
       });
   }, []);
 
-  const nextStart = quarterly ? new Date(quarterly.nextPeriodStart) : null;
-
   if (!products) return <Loading />;
 
   return (
@@ -49,29 +48,11 @@ export function RentalScreen() {
             <Text style={typography.label}>Acervo da casa</Text>
             <Text style={typography.display}>Aluguel</Text>
             <Caption>
-              Peças selecionadas pela VKUDAKA para uso por período, com valor de locação e
-              devolução combinada.
+              Peças selecionadas pela VKUDAKA para uso por período, com valor de locação e devolução
+              combinada.
             </Caption>
 
-            {/* RN-12 — peça do trimestre: 1 por trimestre sem custo de locação, frete por conta da cliente. */}
-            {quarterly?.eligible ? (
-              <View style={[styles.quarter, quarterly.available && styles.quarterOn]}>
-                <Text style={styles.quarterTitle}>
-                  {quarterly.available
-                    ? 'Sua peça do trimestre está disponível'
-                    : 'Peça do trimestre já usada'}
-                </Text>
-                <Body>
-                  {quarterly.available
-                    ? `Escolha uma peça e alugue sem custo de locação — você paga só o frete. Vale até ${
-                        nextStart ? nextStart.toLocaleDateString('pt-BR') : 'o fim do trimestre'
-                      }.`
-                    : `Usada no pedido ${quarterly.usedByOrderCode}. A próxima libera em ${
-                        nextStart ? nextStart.toLocaleDateString('pt-BR') : 'breve'
-                      }. Até lá, o aluguel sai pelo valor normal.`}
-                </Body>
-              </View>
-            ) : null}
+            <QuarterlyNotice quarterly={quarterly} />
           </View>
         }
       />
@@ -81,15 +62,4 @@ export function RentalScreen() {
 
 const styles = StyleSheet.create({
   header: { gap: spacing(0.5), paddingBottom: spacing(2) },
-  quarter: {
-    marginTop: spacing(1.5),
-    padding: spacing(1.75),
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    gap: 4,
-  },
-  quarterOn: { borderColor: colors.gold },
-  quarterTitle: { ...typography.body, fontWeight: '600', color: colors.goldDeep },
 });

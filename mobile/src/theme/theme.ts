@@ -38,6 +38,14 @@ export const colors = {
   /** Texto terciário, placeholders. */
   mutedSoft: '#A79C91',
 
+  /**
+   * Acentos da tela de planos (briefing de 2026-11-11): azul-marinho para o
+   * plano em destaque, marrom para o slogan, creme para os cards claros.
+   */
+  navy: '#1B2A4A',
+  brown: '#5C3A2E',
+  cream: '#F5F1E8',
+
   danger: '#9E3B32',
   success: '#5B7A52',
 

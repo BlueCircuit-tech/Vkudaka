@@ -30,7 +30,11 @@ interface ProductDetail {
   name: string;
   description: string | null;
   composition: string | null;
+  /** Preço que vale agora (já é o promocional, se houver promoção). */
   salePriceCents: number | null;
+  /** Preço "de", só quando a peça está em promoção. */
+  listPriceCents?: number | null;
+  promoEndsAt?: string | null;
   rentalPriceCents: number | null;
   rentalDays: number;
   images: Array<{ url: string; isCover: boolean }>;
@@ -50,6 +54,15 @@ interface ProductDetail {
   } | null;
 }
 
+/** Ordem de exibição: letras (PP→G1), depois numeração (36→46), depois o resto. */
+const LETTER_SIZES = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'U'];
+function sizeRank(size: string): number {
+  const letter = LETTER_SIZES.indexOf(size.toUpperCase());
+  if (letter >= 0) return letter;
+  const numeric = Number(size);
+  return Number.isFinite(numeric) ? 100 + numeric : 1000;
+}
+
 export function ProductDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ProductDetail'>>();
   const navigation = useNavigation<never>();
@@ -57,6 +70,7 @@ export function ProductDetailScreen() {
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [rulesVisible, setRulesVisible] = useState(false);
 
   useEffect(() => {
@@ -73,8 +87,35 @@ export function ProductDetailScreen() {
       ),
     [product, mode],
   );
-  // Peça com mais de uma cor: o chip precisa dizer qual é, senão aparecem dois "38".
-  const multiColor = new Set((product?.variants ?? []).map((v) => v.color)).size > 1;
+  /**
+   * Cores com estoque, na ordem de cadastro. Peça com várias cores escolhe a cor
+   * primeiro e depois o tamanho: listar tamanho × cor num bloco só repetia
+   * "PP P M G GG" uma vez por cor e a cliente não sabia qual era qual.
+   */
+  const colorOptions = useMemo(() => {
+    const seen = new Map<string, string | null>();
+    for (const variant of availableVariants) {
+      if (!seen.has(variant.color)) seen.set(variant.color, variant.colorHex ?? null);
+    }
+    return [...seen].map(([name, hex]) => ({ name, hex }));
+  }, [availableVariants]);
+  const multiColor = colorOptions.length > 1;
+  const activeColor = multiColor ? selectedColor : (colorOptions[0]?.name ?? null);
+  const sizeOptions = activeColor
+    ? availableVariants
+        .filter((variant) => variant.color === activeColor)
+        .sort((a, b) => sizeRank(a.size) - sizeRank(b.size))
+    : [];
+
+  const chooseColor = (color: string) => {
+    setSelectedColor(color);
+    // Mantém o tamanho escolhido se ele existe na cor nova.
+    const current = availableVariants.find((v) => v.id === selectedVariant);
+    const sameSize = current
+      ? availableVariants.find((v) => v.color === color && v.size === current.size)
+      : undefined;
+    setSelectedVariant(sameSize?.id ?? null);
+  };
 
   if (!product) return <Loading />;
 
@@ -93,7 +134,9 @@ export function ProductDetailScreen() {
   return (
     <Screen scroll={false}>
       <ScrollView contentContainerStyle={styles.content}>
-        {cover ? <Image source={{ uri: cover.url }} style={styles.hero} resizeMode="cover" /> : null}
+        {cover ? (
+          <Image source={{ uri: cover.url }} style={styles.hero} resizeMode="cover" />
+        ) : null}
 
         <View style={styles.block}>
           <Label>{mode === 'RENTAL' ? 'Aluguel' : 'Compra'}</Label>
@@ -104,6 +147,18 @@ export function ProductDetailScreen() {
                 Sem custo <Text style={styles.priceStruck}>{formatBRL(priceCents)}</Text>
               </Text>
               <Caption>Sua peça do trimestre — você paga só o frete.</Caption>
+            </>
+          ) : priceCents != null && mode === 'SALE' && product.listPriceCents != null ? (
+            <>
+              <Text style={styles.price}>
+                {formatBRL(priceCents)}{' '}
+                <Text style={styles.priceStruck}>{formatBRL(product.listPriceCents)}</Text>
+              </Text>
+              <Caption>
+                {product.promoEndsAt
+                  ? `Promoção até ${new Date(new Date(product.promoEndsAt).getTime() - 1).toLocaleDateString('pt-BR')}.`
+                  : 'Peça em promoção.'}
+              </Caption>
             </>
           ) : priceCents != null ? (
             <Text style={styles.price}>{formatBRL(priceCents)}</Text>
@@ -126,27 +181,53 @@ export function ProductDetailScreen() {
           </View>
         ) : null}
 
-        <View style={styles.block}>
-          <Label>{multiColor ? 'Tamanho e cor' : 'Tamanho'}</Label>
-          <View style={styles.sizes}>
-            {availableVariants.map((variant) => {
-              const selected = variant.id === selectedVariant;
-              return (
-                <Pressable
-                  key={variant.id}
-                  onPress={() => setSelectedVariant(variant.id)}
-                  style={[styles.size, selected && styles.sizeSelected]}
-                >
-                  {multiColor && variant.colorHex ? (
-                    <View style={[styles.swatch, { backgroundColor: variant.colorHex }]} />
-                  ) : null}
-                  <Text style={[styles.sizeText, selected && { color: colors.ink }]}>
-                    {multiColor ? `${variant.size} · ${variant.color}` : variant.size}
-                  </Text>
-                </Pressable>
-              );
-            })}
+        {multiColor ? (
+          <View style={styles.block}>
+            <Label>Cor{activeColor ? ` · ${activeColor}` : ''}</Label>
+            <View style={styles.sizes}>
+              {colorOptions.map((option) => {
+                const selected = option.name === activeColor;
+                return (
+                  <Pressable
+                    key={option.name}
+                    onPress={() => chooseColor(option.name)}
+                    style={[styles.size, selected && styles.sizeSelected]}
+                  >
+                    {option.hex ? (
+                      <View style={[styles.swatch, { backgroundColor: option.hex }]} />
+                    ) : null}
+                    <Text style={[styles.sizeText, selected && { color: colors.ink }]}>
+                      {option.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
+        ) : null}
+
+        <View style={styles.block}>
+          <Label>Tamanho</Label>
+          {multiColor && !activeColor ? (
+            <Caption>Escolha a cor para ver os tamanhos.</Caption>
+          ) : (
+            <View style={styles.sizes}>
+              {sizeOptions.map((variant) => {
+                const selected = variant.id === selectedVariant;
+                return (
+                  <Pressable
+                    key={variant.id}
+                    onPress={() => setSelectedVariant(variant.id)}
+                    style={[styles.size, selected && styles.sizeSelected]}
+                  >
+                    <Text style={[styles.sizeText, selected && { color: colors.ink }]}>
+                      {variant.size}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
           {availableVariants.length === 0 ? <Caption>Sem estoque no momento.</Caption> : null}
         </View>
       </ScrollView>
@@ -157,7 +238,13 @@ export function ProductDetailScreen() {
           onPress={() => setRulesVisible(true)}
           disabled={!selectedVariant}
         />
-        {!selectedVariant ? <Caption>Escolha um tamanho para continuar.</Caption> : null}
+        {!selectedVariant ? (
+          <Caption>
+            {multiColor && !activeColor
+              ? 'Escolha a cor e o tamanho para continuar.'
+              : 'Escolha um tamanho para continuar.'}
+          </Caption>
+        ) : null}
       </View>
 
       <PurchaseRulesModal
@@ -199,7 +286,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   sizeSelected: { backgroundColor: colors.gold, borderColor: colors.gold },
-  swatch: { width: 10, height: 10, borderRadius: 5, marginRight: 6, borderWidth: 1, borderColor: 'rgba(0,0,0,0.15)' },
+  swatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.15)',
+  },
   sizeText: { ...typography.body, fontSize: 14 },
   footer: {
     padding: spacing(2.5),

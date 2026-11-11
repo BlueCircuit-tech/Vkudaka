@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { formatBRL } from '../api/client';
 import { useApi } from '../lib/useApi';
-import { EmptyState, ErrorBox, Loading, PageHead, SectionTitle } from '../components/Page';
+import { EmptyState, ErrorBox, Loading, PageHead, SectionTitle, Stat } from '../components/Page';
 
 /**
  * Dashboard (3.1) — lucro, vendas e saúde do clube.
@@ -42,6 +42,21 @@ interface SalesVsRentals {
   rented: SalesVsRentals['sold'];
 }
 
+/** GET /admin/reports/club — planos e créditos VKUDAKA. */
+interface ClubReport {
+  activeSubscribers: number;
+  mrrCents: number;
+  byPlan: Array<{
+    planId: string;
+    planName: string;
+    isActive: boolean;
+    subscribers: number;
+    mrrCents: number;
+  }>;
+  credits: { outstandingCents: number; generatedCents: number; usedCents: number };
+  upgrades: { count: number; eligible: number; rate: number };
+}
+
 const today = new Date();
 const iso = (date: Date) => date.toISOString().slice(0, 10);
 const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -77,6 +92,7 @@ export function DashboardPage() {
   const range = `from=${from}&to=${to}`;
   const dashboard = useApi<Dashboard>(`/admin/dashboard?${range}`);
   const report = useApi<SalesVsRentals>(`/admin/reports/sales-vs-rentals?${range}`);
+  const club = useApi<ClubReport>(`/admin/reports/club?${range}`);
 
   if (dashboard.error) return <ErrorBox message={dashboard.error} />;
 
@@ -104,6 +120,17 @@ export function DashboardPage() {
       ) : (
         <DashboardBody data={dashboard.data} />
       )}
+
+      <section className="section">
+        <SectionTitle>Clube</SectionTitle>
+        {club.error ? (
+          <ErrorBox message={club.error} />
+        ) : club.loading || !club.data ? (
+          <Loading rows={2} />
+        ) : (
+          <ClubSection data={club.data} />
+        )}
+      </section>
 
       <section className="section">
         <SectionTitle>Relatório de itens</SectionTitle>
@@ -164,19 +191,19 @@ function DashboardBody({ data }: { data: Dashboard }) {
           <div className="label">O clube</div>
           <div className="kv" style={{ marginTop: 14 }}>
             <Row
-              label="Abatimento gerado"
-              sub="crédito de mensalidade criado no período"
+              label="Crédito de mensalidade gerado"
+              sub="regra antiga (crédito na próxima mensalidade)"
               value={formatBRL(data.rebate.generatedCents)}
             />
             <Row
-              label="Crédito em aberto"
+              label="Crédito de mensalidade em aberto"
               sub="desconto já contratado das próximas mensalidades"
               value={formatBRL(data.rebate.outstandingCents)}
             />
           </div>
           <p className="hint" style={{ marginTop: 16 }}>
-            O crédito do abatimento não tem teto e não expira (RN-02) — some da receita futura,
-            não desta.
+            Desde a regra nova, o desconto fidelidade sai na hora da compra e não gera mais este
+            crédito; os créditos VKUDAKA da assinatura estão na seção Clube abaixo.
           </p>
         </section>
 
@@ -194,6 +221,68 @@ function DashboardBody({ data }: { data: Dashboard }) {
           </div>
         </section>
       </div>
+    </>
+  );
+}
+
+/**
+ * Planos e créditos: com 100% da mensalidade virando crédito VKUDAKA, o saldo
+ * das carteiras é passivo — dinheiro recebido que ainda vai virar peça.
+ */
+function ClubSection({ data }: { data: ClubReport }) {
+  const percent = (rate: number) =>
+    `${(rate * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
+
+  return (
+    <>
+      <div className="grid cols-4">
+        <Stat label="Assinantes ativos" value={String(data.activeSubscribers)} hint="assinaturas vigentes hoje" />
+        <Stat label="MRR" value={formatBRL(data.mrrCents)} hint="receita mensal recorrente" feature />
+        <Stat
+          label="Créditos em aberto"
+          value={formatBRL(data.credits.outstandingCents)}
+          hint={`passivo · ${formatBRL(data.credits.generatedCents)} gerados e ${formatBRL(
+            data.credits.usedCents,
+          )} usados no período`}
+        />
+        <Stat
+          label="Taxa de upgrade"
+          value={percent(data.upgrades.rate)}
+          hint={`${data.upgrades.count} upgrade(s) no período`}
+        />
+      </div>
+
+      <div className="card flush" style={{ marginTop: 16 }}>
+        {data.byPlan.length === 0 ? (
+          <EmptyState title="Nenhum plano ativo" />
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Plano</th>
+                <th>Assinantes</th>
+                <th>MRR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.byPlan.map((row) => (
+                <tr key={row.planId}>
+                  <td>
+                    <strong>{row.planName}</strong>
+                    {!row.isActive ? <span className="sub"> · inativo</span> : null}
+                  </td>
+                  <td className="num">{row.subscribers}</td>
+                  <td className="num">{formatBRL(row.mrrCents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <p className="hint" style={{ marginTop: 10 }}>
+        Taxa de upgrade = trocas para um plano mais caro no período ÷ (essas trocas + assinantes
+        ativos que ainda podem subir de plano). MRR usa o preço travado em cada contrato, por mês.
+      </p>
     </>
   );
 }

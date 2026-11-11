@@ -29,7 +29,7 @@ async function main() {
       priceCents: 8_900,
       interval: 'MONTHLY',
       rebatePercent: new Prisma.Decimal(10),
-      rebateMode: 'CREDIT_NEXT_INVOICE',
+      rebateMode: 'IMMEDIATE_DISCOUNT',
       displayOrder: 1,
       benefits: {
         create: [
@@ -58,7 +58,7 @@ async function main() {
       priceCents: 11_900,
       interval: 'MONTHLY',
       rebatePercent: new Prisma.Decimal(15),
-      rebateMode: 'CREDIT_NEXT_INVOICE',
+      rebateMode: 'IMMEDIATE_DISCOUNT',
       displayOrder: 0,
       benefits: {
         create: [

@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { api, formatBRL, formatDate } from '../api/client';
-import { CREDIT_STATUS, ORDER_STATUS, describe, tagClass } from '../lib/labels';
+import {
+  CREDIT_STATUS,
+  ORDER_STATUS,
+  SUBSCRIPTION_STATUS,
+  WALLET_TX_TYPE,
+  describe,
+  tagClass,
+} from '../lib/labels';
 import { useApi } from '../lib/useApi';
 import {
   EmptyState,
@@ -60,7 +67,37 @@ interface Credit {
   createdAt: string;
 }
 
-interface UserDetail extends Omit<UserRow, 'subscriptions'> {
+interface WalletTx {
+  id: string;
+  type: string;
+  amountCents: number;
+  balanceAfter: number;
+  description: string;
+  createdAt: string;
+}
+
+/** Resumo do clube calculado no servidor (GET /admin/users/:id). */
+interface ClubSummary {
+  planName: string | null;
+  subscriptionStatus: string | null;
+  renewsAt: string | null;
+  rebatePercent: number;
+  rebateMode: 'CREDIT_NEXT_INVOICE' | 'IMMEDIATE_DISCOUNT';
+  quarterlyRental: {
+    eligible: boolean;
+    available: boolean;
+    period: string;
+    periodLabel: string;
+    nextPeriodStart: string;
+    usedByOrderCode: string | null;
+  };
+  rentalsThisYear: number;
+  rentalsYearLimit: number;
+}
+
+interface UserDetail extends Omit<UserRow, 'subscriptions' | 'wallet'> {
+  wallet: { balanceCents: number; transactions: WalletTx[] } | null;
+  club?: ClubSummary;
   birthDate: string | null;
   gender: string | null;
   subscriptions: Subscription[];
@@ -122,7 +159,7 @@ function RebateField({
   const parsed = value.trim() === '' ? null : Number(value.trim().replace(',', '.'));
   return (
     <div className="field" style={{ flex: '1 1 260px', maxWidth: 340 }}>
-      <label>Abatimento (%)</label>
+      <label>Desconto fidelidade (%)</label>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <input
           value={value}
@@ -278,7 +315,7 @@ export function UsersPage() {
                           <>
                             <span className="tag gold">{subscription.plan.name}</span>
                             <div className="sub">
-                              {effectiveRebate(subscription)}% de abatimento
+                              {effectiveRebate(subscription)}% de desconto fidelidade
                               {isNegotiated(subscription) ? ' · negociado' : ''}
                             </div>
                             <div className="sub">até {formatDate(subscription.currentPeriodEnd)}</div>
@@ -353,6 +390,12 @@ function UserDetailModal({
 
   const [planId, setPlanId] = useState('');
   const [months, setMonths] = useState('1');
+  /**
+   * Créditos lançados na carteira pela concessão. null = segue o automático
+   * (preço × meses); texto = a pessoa editou (ex.: "0" para cortesia).
+   */
+  const [creditReais, setCreditReais] = useState<string | null>(null);
+  const [lastCredited, setLastCredited] = useState<number | null>(null);
   /** Vazio = usa o percentual do plano. Preenchido = condição negociada. */
   const [rebate, setRebate] = useState('');
   /** Mesma ideia, mas para corrigir o contrato que já está em vigor. */
@@ -389,6 +432,21 @@ function UserDetailModal({
 
   const selectedPlan = (plans.data ?? []).find((plan) => plan.id === planId);
   const planPercent = selectedPlan ? Number(selectedPlan.rebatePercent) : null;
+
+  // 100% da mensalidade vira crédito VKUDAKA: o padrão é preço do plano × meses.
+  // Renovação do mesmo plano usa o preço travado no contrato, como o servidor.
+  const monthsValue = Math.max(1, Number(months) || 1);
+  const contractPrice =
+    selectedPlan && subscription && subscription.plan.id === selectedPlan.id
+      ? subscription.priceCents
+      : selectedPlan?.priceCents ?? 0;
+  const autoCreditCents = contractPrice * monthsValue;
+  const creditText = creditReais ?? (selectedPlan ? (autoCreditCents / 100).toFixed(2).replace('.', ',') : '');
+  const creditCents = Math.round(Number(creditText.replace(/\./g, '').replace(',', '.')) * 100);
+  const creditError =
+    creditReais !== null && (!Number.isFinite(creditCents) || creditCents < 0)
+      ? 'Valor de créditos inválido.'
+      : null;
 
   // Campo em branco vira `null` de propósito: é assim que o servidor entende
   // "desfaz a condição especial e volta ao percentual do nível".
@@ -443,14 +501,77 @@ function UserDetailModal({
       </p>
 
       <div className="grid cols-2" style={{ marginBottom: 26 }}>
-        <Stat label="Saldo da carteira" value={formatBRL(data.wallet?.balanceCents ?? 0)} hint="paga compras no app" />
         <Stat
-          label="Crédito do clube"
-          value={formatBRL(availableCredit)}
-          hint="abate a mensalidade · não expira"
+          label="Créditos VKUDAKA"
+          value={formatBRL(data.wallet?.balanceCents ?? 0)}
+          hint="saldo da carteira · 100% da mensalidade entra aqui"
           feature
         />
+        <Stat
+          label="Desconto fidelidade"
+          value={`${data.club?.rebatePercent ?? 0}%`}
+          hint={
+            data.club?.rebateMode === 'CREDIT_NEXT_INVOICE'
+              ? 'vira crédito da próxima mensalidade'
+              : 'na hora da compra, mesmo pagando com créditos'
+          }
+        />
       </div>
+
+      {/* ── Clube: plano, renovação e locações ── */}
+      {data.club ? (
+        <>
+          <SectionTitle>Clube</SectionTitle>
+          <div className="card" style={{ marginBottom: 26 }}>
+            <div className="grid cols-4" style={{ gap: 20 }}>
+              <Measure label="Plano atual" value={data.club.planName ?? 'Sem plano'} />
+              <div>
+                <span className="label">Status da assinatura</span>
+                <br />
+                {data.club.subscriptionStatus ? (
+                  (() => {
+                    const status = describe(SUBSCRIPTION_STATUS, data.club.subscriptionStatus);
+                    return <span className={tagClass(status.tone)}>{status.label}</span>;
+                  })()
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </div>
+              <Measure
+                label="Renovação"
+                value={data.club.renewsAt ? formatDate(data.club.renewsAt) : null}
+              />
+              <Measure
+                label="Locações no ano"
+                value={`${data.club.rentalsThisYear} de ${data.club.rentalsYearLimit}`}
+              />
+            </div>
+            <p style={{ marginTop: 16 }}>
+              <span className="label">Locação do trimestre ({data.club.quarterlyRental.periodLabel})</span>
+              <br />
+              {!data.club.quarterlyRental.eligible ? (
+                <span className="muted">Sem assinatura ativa — não tem direito à peça do trimestre.</span>
+              ) : data.club.quarterlyRental.available ? (
+                <>
+                  <span className="tag dot ok">Disponível</span>{' '}
+                  <span className="sub">
+                    1 por trimestre · próximo período em{' '}
+                    {formatDate(data.club.quarterlyRental.nextPeriodStart)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="tag dot gold">Usada</span>{' '}
+                  <span className="sub">
+                    no pedido {data.club.quarterlyRental.usedByOrderCode} · libera de novo em{' '}
+                    {formatDate(data.club.quarterlyRental.nextPeriodStart)}
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+        </>
+      ) : null}
 
       {/* ── Assinatura ── */}
       <SectionTitle>Assinatura</SectionTitle>
@@ -463,7 +584,7 @@ function UserDetailModal({
                 {formatBRL(subscription.priceCents)} · vigente até {formatDate(subscription.currentPeriodEnd)}
               </div>
               <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="tag gold">{effectiveRebate(subscription)}% de abatimento</span>
+                <span className="tag gold">{effectiveRebate(subscription)}% de desconto fidelidade</span>
                 <span className="sub">
                   {isNegotiated(subscription)
                     ? `negociado — o nível ${subscription.plan.name} dá ${Number(
@@ -541,7 +662,13 @@ function UserDetailModal({
       <div className="row" style={{ marginBottom: 26 }}>
         <div className="field">
           <label>{subscription ? 'Trocar/renovar plano' : 'Conceder plano'}</label>
-          <select value={planId} onChange={(e) => setPlanId(e.target.value)}>
+          <select
+            value={planId}
+            onChange={(e) => {
+              setPlanId(e.target.value);
+              setCreditReais(null);
+            }}
+          >
             <option value="">Selecione…</option>
             {(plans.data ?? []).map((plan) => (
               <option key={plan.id} value={plan.id}>
@@ -552,7 +679,23 @@ function UserDetailModal({
         </div>
         <div className="field" style={{ maxWidth: 130 }}>
           <label>Meses</label>
-          <input value={months} onChange={(e) => setMonths(e.target.value)} />
+          <input
+            value={months}
+            onChange={(e) => {
+              setMonths(e.target.value);
+              setCreditReais(null);
+            }}
+          />
+        </div>
+        <div className="field" style={{ maxWidth: 170 }}>
+          <label>Créditos na carteira (R$)</label>
+          <input
+            value={creditText}
+            disabled={!selectedPlan}
+            onChange={(e) => setCreditReais(e.target.value)}
+            inputMode="decimal"
+          />
+          <span className="hint">0 para cortesia</span>
         </div>
         <RebateField
           value={rebate}
@@ -561,18 +704,25 @@ function UserDetailModal({
           error={rebateError}
         />
         <button
-          disabled={!planId || busy || rebateError != null}
+          disabled={!planId || busy || rebateError != null || creditError != null}
           onClick={() =>
             void run(async () => {
-              await api.post(`/admin/users/${userId}/subscription`, {
-                planId,
-                months: Number(months) || 1,
-                // null devolve a pessoa ao percentual do nível; número grava a
-                // condição negociada no contrato.
-                rebatePercent: parsedRebate,
-              });
+              const result = await api.post<{ creditedCents?: number }>(
+                `/admin/users/${userId}/subscription`,
+                {
+                  planId,
+                  months: monthsValue,
+                  // null devolve a pessoa ao percentual do nível; número grava a
+                  // condição negociada no contrato.
+                  rebatePercent: parsedRebate,
+                  // Sem edição, o servidor calcula o mesmo valor (preço × meses).
+                  ...(creditReais !== null ? { creditCents } : {}),
+                },
+              );
+              setLastCredited(result?.creditedCents ?? 0);
               setPlanId('');
               setRebate('');
+              setCreditReais(null);
             })
           }
         >
@@ -580,6 +730,15 @@ function UserDetailModal({
         </button>
       </div>
 
+
+      {creditError ? <p className="error" style={{ marginTop: -18, marginBottom: 18 }}>{creditError}</p> : null}
+      {lastCredited !== null ? (
+        <p className="notice" style={{ marginTop: -14, marginBottom: 26 }}>
+          {lastCredited > 0
+            ? `Assinatura aplicada · ${formatBRL(lastCredited)} em créditos lançados na carteira.`
+            : 'Assinatura aplicada como cortesia · nenhum crédito lançado.'}
+        </p>
+      ) : null}
 
       {/* ── Carteira ── */}
       <SectionTitle>Ajuste manual de carteira</SectionTitle>
@@ -657,8 +816,52 @@ function UserDetailModal({
         </p>
       )}
 
-      {/* ── Créditos ── */}
-      <SectionTitle>Créditos de abatimento</SectionTitle>
+      {/* ── Histórico de créditos VKUDAKA (carteira) ── */}
+      <SectionTitle>Histórico de créditos</SectionTitle>
+      <div className="card flush" style={{ marginBottom: 26 }}>
+        {(data.wallet?.transactions ?? []).length === 0 ? (
+          <EmptyState
+            title="Nenhuma movimentação"
+            description="Créditos da assinatura, compras com saldo e ajustes aparecem aqui."
+          />
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Tipo</th>
+                <th>Descrição</th>
+                <th>Valor</th>
+                <th>Saldo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data.wallet?.transactions ?? []).map((tx) => {
+                const type = describe(WALLET_TX_TYPE, tx.type);
+                return (
+                  <tr key={tx.id}>
+                    <td className="muted">{formatDate(tx.createdAt)}</td>
+                    <td>
+                      <span className={tagClass(type.tone)}>{type.label}</span>
+                    </td>
+                    <td>{tx.description}</td>
+                    <td className="num">
+                      {tx.amountCents > 0 ? '+' : '−'}
+                      {formatBRL(Math.abs(tx.amountCents))}
+                    </td>
+                    <td className="num">{formatBRL(tx.balanceAfter)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* ── Créditos de mensalidade (regra antiga) ── */}
+      {data.credits.length > 0 || availableCredit > 0 ? (
+        <>
+      <SectionTitle>Créditos de mensalidade (regra antiga)</SectionTitle>
       <div className="card flush" style={{ marginBottom: 26 }}>
         {data.credits.length === 0 ? (
           <EmptyState title="Nenhum crédito gerado" description="Compras sem uso de saldo geram crédito aqui." />
@@ -692,6 +895,8 @@ function UserDetailModal({
           </table>
         )}
       </div>
+        </>
+      ) : null}
 
       {/* ── Pedidos ── */}
       <SectionTitle>Últimos pedidos</SectionTitle>

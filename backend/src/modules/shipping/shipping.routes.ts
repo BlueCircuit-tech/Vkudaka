@@ -7,6 +7,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireActiveSubscriber } from '../../middleware/requireActiveSubscriber.js';
 import { validate } from '../../middleware/validate.js';
 import { quoteAllServices, resolveFreeShipping } from './shipping.service.js';
+import { salePriceAt } from '../../domain/pricing/promo.js';
 
 /** Cotação de frete no fechamento da compra (3.6 / RN-08). */
 export const shippingRouter: Router = Router();
@@ -36,7 +37,18 @@ shippingRouter.post(
 
     const variants = await prisma.productVariant.findMany({
       where: { id: { in: body.items.map((i) => i.variantId) } },
-      include: { product: { select: { weightGrams: true, salePriceCents: true, freeShipping: true } } },
+      include: {
+        product: {
+          select: {
+            weightGrams: true,
+            salePriceCents: true,
+            promoPriceCents: true,
+            promoStartsAt: true,
+            promoEndsAt: true,
+            freeShipping: true,
+          },
+        },
+      },
     });
     if (variants.length !== body.items.length) throw notFound('Peça');
 
@@ -47,8 +59,9 @@ shippingRouter.post(
       (sum, v) => sum + v.product.weightGrams * quantityOf(v.id),
       0,
     );
+    const now = new Date();
     const declaredValueCents = variants.reduce(
-      (sum, v) => sum + (v.product.salePriceCents ?? 0) * quantityOf(v.id),
+      (sum, v) => sum + (salePriceAt(v.product, now).priceCents ?? 0) * quantityOf(v.id),
       0,
     );
     const itemCount = body.items.reduce((sum, i) => sum + i.quantity, 0);

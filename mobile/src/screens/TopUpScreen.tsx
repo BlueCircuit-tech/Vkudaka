@@ -276,8 +276,8 @@ export function TopUpScreen() {
 
         <View style={styles.notice}>
           <Caption>
-            Lembrete: pagar uma compra com saldo da carteira desativa o abatimento do plano
-            naquele pedido.
+            Seu desconto fidelidade continua valendo quando você paga com os créditos da
+            carteira.
           </Caption>
         </View>
       </ScrollView>

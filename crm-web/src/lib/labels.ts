@@ -48,6 +48,25 @@ export const CREDIT_STATUS: Record<string, { label: string; tone: Tone }> = {
   CANCELED: { label: 'Cancelado', tone: 'danger' },
 };
 
+/** Movimentos da carteira (créditos VKUDAKA). */
+export const WALLET_TX_TYPE: Record<string, { label: string; tone: Tone }> = {
+  SUBSCRIPTION: { label: 'Créditos da assinatura', tone: 'gold' },
+  TOPUP: { label: 'Recarga', tone: 'ok' },
+  PURCHASE: { label: 'Compra', tone: 'neutral' },
+  REFUND: { label: 'Estorno', tone: 'ok' },
+  ADJUSTMENT_CREDIT: { label: 'Ajuste (+)', tone: 'neutral' },
+  ADJUSTMENT_DEBIT: { label: 'Ajuste (−)', tone: 'danger' },
+};
+
+export const SUBSCRIPTION_STATUS: Record<string, { label: string; tone: Tone }> = {
+  TRIALING: { label: 'Em teste', tone: 'gold' },
+  ACTIVE: { label: 'Ativa', tone: 'ok' },
+  PAST_DUE: { label: 'Em atraso', tone: 'danger' },
+  PAUSED: { label: 'Pausada', tone: 'neutral' },
+  CANCELED: { label: 'Cancelada', tone: 'danger' },
+  EXPIRED: { label: 'Expirada', tone: 'neutral' },
+};
+
 export const MODEL_STATUS: Record<string, { label: string; tone: Tone }> = {
   RECEIVED: { label: 'Recebida', tone: 'neutral' },
   IN_REVIEW: { label: 'Em análise', tone: 'gold' },

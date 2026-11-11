@@ -7,9 +7,13 @@ import { asyncHandler, pageResult, paginate, param } from '../../lib/http.js';
 import { notFound } from '../../lib/errors.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
-import { dailySeries, dashboard, salesVsRentals } from './reports.service.js';
+import { clubReport, dailySeries, dashboard, salesVsRentals } from './reports.service.js';
 import * as wallet from '../../domain/wallet/wallet.service.js';
 import { dispatch } from '../notifications/notifications.service.js';
+import {
+  getRebateSettings,
+  quarterlyRentalStatus,
+} from '../subscriptions/subscriptions.service.js';
 
 /** API do painel CRM (3.1 a 3.7). Tudo aqui exige STAFF ou ADMIN. */
 export const adminRouter: Router = Router();
@@ -43,6 +47,15 @@ adminRouter.get(
   }),
 );
 
+/** Planos e créditos: assinantes por plano, MRR, créditos em aberto, upgrades. */
+adminRouter.get(
+  '/reports/club',
+  validate(rangeQuery, 'query'),
+  asyncHandler(async (req, res) => {
+    res.json(await clubReport(resolveRange(req.query as z.infer<typeof rangeQuery>)));
+  }),
+);
+
 adminRouter.get(
   '/reports/sales-vs-rentals',
   validate(rangeQuery, 'query'),
@@ -53,21 +66,31 @@ adminRouter.get(
 
 // ── 3.2 Planos e níveis de desconto ──────────────────────────────────────────
 
+/** Benefício do plano: texto do card + (opcional) linha da tabela comparativa. */
+const benefitSchema = z.object({
+  title: z.string().min(2).max(120),
+  description: z.string().max(300).optional(),
+  compareLabel: z.string().max(60).nullable().optional(),
+  compareValue: z.string().max(20).nullable().optional(),
+});
+
 const planSchema = z.object({
   name: z.string().min(2).max(60),
   slug: z.string().min(2).max(60).regex(/^[a-z0-9-]+$/),
   description: z.string().max(500).optional(),
   priceCents: z.number().int().min(0),
+  /** Preço "de" (riscado no app). null remove. */
+  compareAtPriceCents: z.number().int().min(0).nullable().optional(),
+  promoLabel: z.string().max(40).nullable().optional(),
+  highlightLabel: z.string().max(40).nullable().optional(),
   interval: z.enum(['MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL']).default('MONTHLY'),
   intervalCount: z.number().int().min(1).max(12).default(1),
   /** RN-02 — percentual de abatimento do nível. É daqui que o app lê. */
   rebatePercent: z.number().min(0).max(100),
-  rebateMode: z.enum(['CREDIT_NEXT_INVOICE', 'IMMEDIATE_DISCOUNT']).default('CREDIT_NEXT_INVOICE'),
+  rebateMode: z.enum(['CREDIT_NEXT_INVOICE', 'IMMEDIATE_DISCOUNT']).default('IMMEDIATE_DISCOUNT'),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
-  benefits: z
-    .array(z.object({ title: z.string().max(120), description: z.string().max(300).optional() }))
-    .default([]),
+  benefits: z.array(benefitSchema).max(20).default([]),
 });
 
 adminRouter.get(
@@ -115,20 +138,11 @@ adminRouter.put(
   requireRole('ADMIN'),
   validate(
     z.object({
-      benefits: z
-        .array(
-          z.object({
-            title: z.string().min(2).max(120),
-            description: z.string().max(300).optional(),
-          }),
-        )
-        .max(20),
+      benefits: z.array(benefitSchema).max(20),
     }),
   ),
   asyncHandler(async (req, res) => {
-    const { benefits } = req.body as {
-      benefits: Array<{ title: string; description?: string }>;
-    };
+    const { benefits } = req.body as { benefits: Array<z.infer<typeof benefitSchema>> };
     const planId = param(req, 'id');
 
     const plan = await prisma.$transaction(async (tx) => {
@@ -141,6 +155,8 @@ adminRouter.put(
             create: benefits.map((b, index) => ({
               title: b.title,
               description: b.description ?? null,
+              compareLabel: b.compareLabel?.trim() || null,
+              compareValue: b.compareValue?.trim() || null,
               displayOrder: index,
             })),
           },
@@ -190,8 +206,16 @@ adminRouter.patch(
         action: 'plan.update',
         entity: 'Plan',
         entityId: plan.id,
-        before: { rebatePercent: before.rebatePercent.toString(), priceCents: before.priceCents },
-        after: { rebatePercent: plan.rebatePercent.toString(), priceCents: plan.priceCents },
+        before: {
+          rebatePercent: before.rebatePercent.toString(),
+          priceCents: before.priceCents,
+          compareAtPriceCents: before.compareAtPriceCents,
+        },
+        after: {
+          rebatePercent: plan.rebatePercent.toString(),
+          priceCents: plan.priceCents,
+          compareAtPriceCents: plan.compareAtPriceCents,
+        },
         ip: req.ip,
       },
     });
@@ -289,7 +313,36 @@ adminRouter.get(
         orders: { orderBy: { createdAt: 'desc' }, take: 20, include: { items: true } },
       },
     });
-    res.json({ ...user, passwordHash: undefined });
+
+    // Resumo do clube para o CRM: plano, % de desconto que vale, locações do
+    // trimestre (limite 1) e do ano (limite 4, um por trimestre).
+    const year = new Date().getFullYear();
+    const [settings, quarterly, rentalsThisYear] = await Promise.all([
+      getRebateSettings(prisma, user.id),
+      quarterlyRentalStatus(prisma, user.id),
+      prisma.order.count({
+        where: {
+          userId: user.id,
+          quarterlyRentalPeriod: { startsWith: `${year}-Q` },
+          status: { notIn: ['CANCELED', 'REFUNDED'] },
+        },
+      }),
+    ]);
+
+    res.json({
+      ...user,
+      passwordHash: undefined,
+      club: {
+        planName: settings.subscription?.plan.name ?? null,
+        subscriptionStatus: settings.subscription?.status ?? null,
+        renewsAt: settings.subscription?.currentPeriodEnd ?? null,
+        rebatePercent: settings.rebatePercent,
+        rebateMode: settings.rebateMode,
+        quarterlyRental: quarterly,
+        rentalsThisYear,
+        rentalsYearLimit: 4,
+      },
+    });
   }),
 );
 
@@ -567,6 +620,11 @@ adminRouter.post(
       planId: z.string().uuid(),
       months: z.number().int().min(1).max(24).default(1),
       rebatePercent: z.number().min(0).max(100).nullable().optional(),
+      /**
+       * Créditos VKUDAKA lançados na carteira por este pagamento. Omitido =
+       * 100% do valor (preço do contrato × meses); 0 = cortesia, sem crédito.
+       */
+      creditCents: z.number().int().min(0).optional(),
     }),
   ),
   asyncHandler(async (req, res) => {
@@ -574,6 +632,7 @@ adminRouter.post(
       planId: string;
       months: number;
       rebatePercent?: number | null;
+      creditCents?: number;
     };
     const userId = param(req, 'id');
 
@@ -585,7 +644,29 @@ adminRouter.post(
           ? null
           : new Prisma.Decimal(body.rebatePercent);
 
-    const result = await prisma.$transaction(async (tx) => {
+    /**
+     * 100% da mensalidade vira crédito VKUDAKA (regra de 2026-11-11): o valor
+     * pago entra na carteira para comprar peças. Usa o preço travado no contrato.
+     */
+    const creditSubscription = async (
+      tx: Prisma.TransactionClient,
+      subscription: { priceCents: number; plan: { name: string } },
+    ) => {
+      const amountCents = body.creditCents ?? subscription.priceCents * body.months;
+      if (amountCents <= 0) return 0;
+      await wallet.credit(tx, {
+        userId,
+        type: 'SUBSCRIPTION',
+        amountCents,
+        description: `Assinatura ${subscription.plan.name} — ${body.months} ${
+          body.months > 1 ? 'meses' : 'mês'
+        } em créditos`,
+        createdById: req.auth!.userId,
+      });
+      return amountCents;
+    };
+
+    const { result, creditedCents } = await prisma.$transaction(async (tx) => {
       const plan = await tx.plan.findUniqueOrThrow({ where: { id: body.planId } });
 
       const current = await tx.subscription.findFirst({
@@ -601,7 +682,7 @@ adminRouter.post(
       if (current) {
         // Troca de plano encerra o contrato anterior e abre outro com o preço novo.
         if (current.planId === body.planId) {
-          return tx.subscription.update({
+          const renewed = await tx.subscription.update({
             where: { id: current.id },
             data: {
               currentPeriodEnd: end,
@@ -611,6 +692,7 @@ adminRouter.post(
             },
             include: { plan: true },
           });
+          return { result: renewed, creditedCents: await creditSubscription(tx, renewed) };
         }
         await tx.subscription.update({
           where: { id: current.id },
@@ -618,7 +700,7 @@ adminRouter.post(
         });
       }
 
-      return tx.subscription.create({
+      const created = await tx.subscription.create({
         data: {
           userId,
           planId: plan.id,
@@ -630,6 +712,7 @@ adminRouter.post(
         },
         include: { plan: true },
       });
+      return { result: created, creditedCents: await creditSubscription(tx, created) };
     });
 
     await prisma.auditLog.create({
@@ -644,12 +727,13 @@ adminRouter.post(
           userId,
           rebatePercent: result.rebatePercent?.toString() ?? null,
           planRebatePercent: result.plan.rebatePercent.toString(),
+          creditedCents,
         },
         ip: req.ip,
       },
     });
 
-    res.status(201).json(result);
+    res.status(201).json({ ...result, creditedCents });
   }),
 );
 

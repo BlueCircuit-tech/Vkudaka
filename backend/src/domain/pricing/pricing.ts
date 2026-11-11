@@ -29,7 +29,8 @@ export type RebateBlockedReason =
   | 'WALLET_USED' // RN-02: usou crédito da carteira
   | 'NO_PLAN' // sem assinatura ativa ou plano com 0%
   | 'PERCENT_COUPON' // RN-02: não é acumulativo com outro percentual
-  | 'ZERO_BASE'; // nada a abater (ex.: pedido só de frete)
+  | 'ZERO_BASE' // nada a abater (ex.: pedido só de frete)
+  | 'PROMO_ITEMS'; // só peças em promoção, que não recebem o abatimento do plano
 
 export interface QuoteItem {
   /** Referência opcional — o motor não consulta nada, só ecoa. */
@@ -39,6 +40,8 @@ export interface QuoteItem {
   readonly quantity: number;
   /** Peça marcada como frete grátis no catálogo (RN-08). */
   readonly freeShipping?: boolean;
+  /** Peça em promoção: fica fora da base do abatimento do plano. */
+  readonly noRebate?: boolean;
 }
 
 export interface QuoteCoupon {
@@ -204,6 +207,8 @@ function evaluateRebate(params: {
   rebatePercent: number;
   couponIsPercent: boolean;
   baseCents: number;
+  /** Base sem as peças em promoção. */
+  rebateBaseCents: number;
 }): { eligible: boolean; reason: RebateBlockedReason | null } {
   if (params.walletAppliedCents > 0) return { eligible: false, reason: 'WALLET_USED' };
   if (!params.hasActiveSubscription || params.rebatePercent <= 0) {
@@ -213,6 +218,7 @@ function evaluateRebate(params: {
     return { eligible: false, reason: 'PERCENT_COUPON' };
   }
   if (params.baseCents <= 0) return { eligible: false, reason: 'ZERO_BASE' };
+  if (params.rebateBaseCents <= 0) return { eligible: false, reason: 'PROMO_ITEMS' };
   return { eligible: true, reason: null };
 }
 
@@ -252,31 +258,58 @@ export function quoteOrder(input: QuoteInput): QuoteResult {
   // 5 ─ Total antes do abatimento
   const totalBeforeRebate = netItemsCents + shippingCents;
 
-  // 6 ─ Carteira: limitada pelo saldo e pelo total
-  const walletAppliedCents = Math.min(
-    input.requestedWalletCents,
-    input.walletBalanceCents,
-    totalBeforeRebate,
-  );
+  // Peças em promoção ficam fora da base; o cupom é rateado pelo valor dos itens.
+  const promoSubtotalCents = calcSubtotal(input.items.filter((i) => i.noRebate));
+  const eligibleNetCents =
+    promoSubtotalCents === 0
+      ? netItemsCents
+      : subtotalCents === 0
+        ? 0
+        : Math.round((netItemsCents * (subtotalCents - promoSubtotalCents)) / subtotalCents);
 
-  // 7 ─ Elegibilidade do abatimento (RN-02)
-  const { eligible, reason } = evaluateRebate({
-    walletAppliedCents,
-    hasActiveSubscription: input.hasActiveSubscription,
-    rebatePercent: input.rebatePercent,
-    couponIsPercent: coupon.isPercent,
-    baseCents: netItemsCents,
-  });
+  const isImmediate = input.rebateMode === 'IMMEDIATE_DISCOUNT';
 
-  // 8 ─ Abatimento: crédito de mensalidade OU desconto imediato
-  const rebateBaseCents = eligible ? netItemsCents : 0;
-  const rebateValueCents = eligible ? applyPercent(rebateBaseCents, input.rebatePercent) : 0;
+  const rebateFor = (walletAppliedCents: number) =>
+    evaluateRebate({
+      walletAppliedCents,
+      hasActiveSubscription: input.hasActiveSubscription,
+      rebatePercent: input.rebatePercent,
+      couponIsPercent: coupon.isPercent,
+      baseCents: netItemsCents,
+      rebateBaseCents: eligibleNetCents,
+    });
 
-  const immediateDiscountCents =
-    eligible && input.rebateMode === 'IMMEDIATE_DISCOUNT' ? rebateValueCents : 0;
-  const rebateCreditCents =
-    eligible && input.rebateMode === 'CREDIT_NEXT_INVOICE' ? rebateValueCents : 0;
+  let walletAppliedCents: number;
+  let eligible: boolean;
+  let reason: RebateBlockedReason | null;
+  let immediateDiscountCents = 0;
+  let rebateCreditCents = 0;
 
+  if (isImmediate) {
+    // Desconto fidelidade (padrão desde 2026-11-11): a mensalidade inteira já
+    // virou crédito na carteira, então pagar com saldo NÃO tira o desconto.
+    // O desconto sai primeiro e a carteira cobre o que sobra.
+    ({ eligible, reason } = rebateFor(0));
+    immediateDiscountCents = eligible ? applyPercent(eligibleNetCents, input.rebatePercent) : 0;
+    walletAppliedCents = Math.min(
+      input.requestedWalletCents,
+      input.walletBalanceCents,
+      clampToZero(totalBeforeRebate - immediateDiscountCents),
+    );
+  } else {
+    // 6 ─ Carteira: limitada pelo saldo e pelo total
+    walletAppliedCents = Math.min(
+      input.requestedWalletCents,
+      input.walletBalanceCents,
+      totalBeforeRebate,
+    );
+    // 7 ─ Elegibilidade: no modo crédito, usar a carteira bloqueia (RN-02 original)
+    ({ eligible, reason } = rebateFor(walletAppliedCents));
+    // 8 ─ Crédito para a próxima mensalidade
+    rebateCreditCents = eligible ? applyPercent(eligibleNetCents, input.rebatePercent) : 0;
+  }
+
+  const rebateBaseCents = eligible ? eligibleNetCents : 0;
   const totalCents = clampToZero(totalBeforeRebate - immediateDiscountCents);
 
   // 9 ─ Diferença a pagar no gateway ("inteirar o valor" — 2.6)
@@ -309,7 +342,8 @@ function buildAlternative(
   input: QuoteInput,
   walletAppliedCents: number,
 ): QuoteResult['alternativeWithoutWallet'] {
-  if (walletAppliedCents === 0) return null;
+  // No desconto fidelidade a carteira não muda o benefício: não há escolha a mostrar.
+  if (walletAppliedCents === 0 || input.rebateMode === 'IMMEDIATE_DISCOUNT') return null;
   const withoutWallet = quoteOrder({ ...input, requestedWalletCents: 0 });
   if (!withoutWallet.rebateEligible) return null;
   return {
@@ -328,7 +362,7 @@ export function describeRebate(quote: QuoteResult): string {
     return `Esta compra gera ${formatBRL(quote.rebateCreditCents)} de crédito na sua próxima mensalidade.`;
   }
   if (quote.rebateEligible) {
-    return `Desconto de ${formatBRL(quote.immediateDiscountCents)} já aplicado nesta compra.`;
+    return `Desconto fidelidade de ${quote.rebatePercentApplied}% (${formatBRL(quote.immediateDiscountCents)}) já aplicado nesta compra.`;
   }
   switch (quote.rebateBlockedReason) {
     case 'WALLET_USED':
@@ -339,8 +373,12 @@ export function describeRebate(quote: QuoteResult): string {
         : 'O abatimento não se aplica quando você usa saldo da carteira.';
     case 'PERCENT_COUPON':
       return 'O cupom percentual substitui o abatimento do plano — os dois não se somam.';
+    case 'PROMO_ITEMS':
+      return 'Peça em promoção: o desconto do plano não se soma ao valor promocional.';
     case 'NO_PLAN':
-      return 'Assine o clube para gerar crédito de mensalidade a cada compra.';
+      return quote.rebateMode === 'IMMEDIATE_DISCOUNT'
+        ? 'Assine o clube para ter desconto fidelidade em toda compra.'
+        : 'Assine o clube para gerar crédito de mensalidade a cada compra.';
     default:
       return '';
   }

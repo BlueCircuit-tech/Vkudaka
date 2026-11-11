@@ -9,6 +9,7 @@ import { requireActiveSubscriber } from '../../middleware/requireActiveSubscribe
 import { validate } from '../../middleware/validate.js';
 import { getRebateSettings, quarterlyRentalStatus } from '../subscriptions/subscriptions.service.js';
 import { describeRebate, quoteOrder } from '../../domain/pricing/pricing.js';
+import { withPromo } from '../../domain/pricing/promo.js';
 
 /**
  * Vitrine (2.3).
@@ -84,7 +85,8 @@ catalogRouter.get(
       prisma.product.count({ where }),
     ]);
 
-    res.json(pageResult(products, total, page, perPage));
+    const now = new Date();
+    res.json(pageResult(products.map((p) => withPromo(p, now)), total, page, perPage));
   }),
 );
 
@@ -117,7 +119,8 @@ catalogRouter.get(
       prisma.product.count({ where }),
     ]);
 
-    res.json(pageResult(products, total, page, perPage));
+    const now = new Date();
+    res.json(pageResult(products.map((p) => withPromo(p, now)), total, page, perPage));
   }),
 );
 
@@ -152,7 +155,11 @@ catalogRouter.get(
     ]);
 
     // RN-12 — a vitrine diz se a peça do trimestre ainda está disponível.
-    res.json({ ...pageResult(products, total, page, perPage), quarterlyRental });
+    const now = new Date();
+    res.json({
+      ...pageResult(products.map((p) => withPromo(p, now)), total, page, perPage),
+      quarterlyRental,
+    });
   }),
 );
 
@@ -189,10 +196,12 @@ catalogRouter.get(
       req.auth!.userId,
     );
 
-    const previewFor = (priceCents: number | null) => {
+    const priced = withPromo(product, new Date());
+
+    const previewFor = (priceCents: number | null, noRebate = false) => {
       if (priceCents === null) return null;
       const quote = quoteOrder({
-        items: [{ kind: 'SALE', unitPriceCents: priceCents, quantity: 1 }],
+        items: [{ kind: 'SALE', unitPriceCents: priceCents, quantity: 1, noRebate }],
         rebatePercent,
         rebateMode,
         hasActiveSubscription,
@@ -209,11 +218,11 @@ catalogRouter.get(
     };
 
     res.json({
-      ...product,
+      ...priced,
       rebatePreview: {
         percent: rebatePercent,
         mode: rebateMode,
-        sale: previewFor(product.salePriceCents),
+        sale: previewFor(priced.salePriceCents, priced.promoActive),
         rental: previewFor(product.rentalPriceCents),
       },
       // RN-12 — o botão "Alugar" precisa saber se esta peça sai sem custo.

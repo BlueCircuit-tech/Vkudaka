@@ -6,7 +6,10 @@ import { EmptyState } from './ui';
 export interface ProductSummary {
   id: string;
   name: string;
+  /** Preço que vale agora (já é o promocional, se houver promoção). */
   salePriceCents: number | null;
+  /** Preço "de", só quando a peça está em promoção. */
+  listPriceCents?: number | null;
   rentalPriceCents: number | null;
   availability: 'SALE' | 'RENTAL' | 'BOTH';
   isHighlighted: boolean;
@@ -45,9 +48,12 @@ export function ProductGrid({
       contentContainerStyle={styles.list}
       ListHeaderComponent={ListHeaderComponent}
       ListFooterComponent={ListFooterComponent}
-      ListEmptyComponent={<EmptyState title="Nada por aqui ainda" description="Novidades em breve." />}
+      ListEmptyComponent={
+        <EmptyState title="Nada por aqui ainda" description="Novidades em breve." />
+      }
       renderItem={({ item }) => {
         const priceCents = mode === 'RENTAL' ? item.rentalPriceCents : item.salePriceCents;
+        const listPriceCents = mode === 'SALE' ? (item.listPriceCents ?? null) : null;
         const cover = item.images.find((image) => image.isCover) ?? item.images[0];
 
         return (
@@ -56,15 +62,21 @@ export function ProductGrid({
             style={({ pressed }) => [styles.card, pressed && { opacity: 0.75 }]}
             accessibilityRole="button"
           >
-            {cover ? (
-              <Image source={{ uri: cover.url }} style={styles.image} resizeMode="cover" />
-            ) : (
-              <View style={[styles.image, styles.imageFallback]} />
-            )}
+            <View>
+              {cover ? (
+                <Image source={{ uri: cover.url }} style={styles.image} resizeMode="cover" />
+              ) : (
+                <View style={[styles.image, styles.imageFallback]} />
+              )}
+              {listPriceCents !== null ? <Text style={styles.badge}>Promoção</Text> : null}
+            </View>
             <View style={styles.info}>
               <Text style={styles.name} numberOfLines={2}>
                 {item.name}
               </Text>
+              {listPriceCents !== null ? (
+                <Text style={styles.listPrice}>{formatBRL(listPriceCents)}</Text>
+              ) : null}
               {priceCents !== null ? (
                 <Text style={styles.price}>
                   {formatBRL(priceCents)}
@@ -93,4 +105,17 @@ const styles = StyleSheet.create({
   info: { paddingTop: spacing(1), gap: 2 },
   name: { ...typography.body, fontSize: 14 },
   price: { color: colors.goldDeep, fontSize: 14.5, fontFamily: fonts.display },
+  listPrice: { ...typography.caption, textDecorationLine: 'line-through', color: colors.muted },
+  badge: {
+    position: 'absolute',
+    top: spacing(1),
+    left: spacing(1),
+    paddingHorizontal: spacing(1),
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.gold,
+    color: colors.ink,
+    fontSize: 11,
+    overflow: 'hidden',
+  },
 });

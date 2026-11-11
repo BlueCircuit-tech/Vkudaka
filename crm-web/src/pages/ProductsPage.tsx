@@ -182,6 +182,9 @@ interface Product {
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   salePriceCents: number | null;
   rentalPriceCents: number | null;
+  promoPriceCents: number | null;
+  promoStartsAt: string | null;
+  promoEndsAt: string | null;
   freeShipping: boolean;
   isHighlighted: boolean;
   variants: Variant[];
@@ -207,6 +210,86 @@ const slugify = (value: string) =>
 
 const toCents = (value: string) => Math.round(Number(value.replace(',', '.')) * 100);
 const toReais = (cents: number | null) => (cents === null ? '' : String(cents / 100));
+
+/**
+ * Datas da promoção. O formulário usa dias (início e fim inclusos); o servidor
+ * guarda instantes: início = 00h do dia, fim = 00h do dia SEGUINTE ao último dia.
+ */
+const dayStart = (day: string) => (day ? new Date(`${day}T00:00:00`).toISOString() : null);
+const dayAfter = (day: string) => {
+  if (!day) return null;
+  const date = new Date(`${day}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return date.toISOString();
+};
+const toDayInput = (iso: string | null, minusOne = false) => {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (minusOne) date.setDate(date.getDate() - 1);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+/** Promoção valendo agora (mesma regra do servidor, só para exibir no CRM). */
+function promoNow(product: Product): number | null {
+  const { salePriceCents: sale, promoPriceCents: promo, promoStartsAt, promoEndsAt } = product;
+  if (sale == null || promo == null || promo >= sale) return null;
+  const now = Date.now();
+  if (promoStartsAt && now < new Date(promoStartsAt).getTime()) return null;
+  if (promoEndsAt && now >= new Date(promoEndsAt).getTime()) return null;
+  return promo;
+}
+
+function SalePrice({ product }: { product: Product }) {
+  if (!product.salePriceCents) return <>—</>;
+  const promo = promoNow(product);
+  if (promo == null) return <>{formatBRL(product.salePriceCents)}</>;
+  return (
+    <>
+      <s style={{ opacity: 0.55, marginRight: 6 }}>{formatBRL(product.salePriceCents)}</s>
+      {formatBRL(promo)} <span className="tag gold">promo</span>
+    </>
+  );
+}
+
+function PromoFields({
+  price,
+  start,
+  end,
+  onChange,
+}: {
+  price: string;
+  start: string;
+  end: string;
+  onChange: (key: 'promoPrice' | 'promoStart' | 'promoEnd', value: string) => void;
+}) {
+  return (
+    <>
+      <div className="row">
+        <div className="field">
+          <label>Valor promocional (R$)</label>
+          <input
+            value={price}
+            placeholder="opcional"
+            onChange={(e) => onChange('promoPrice', e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label>Promoção começa em</label>
+          <input type="date" value={start} onChange={(e) => onChange('promoStart', e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Termina em (inclusive)</label>
+          <input type="date" value={end} onChange={(e) => onChange('promoEnd', e.target.value)} />
+        </div>
+      </div>
+      <p className="sub" style={{ marginTop: -6, marginBottom: 14 }}>
+        Só para venda. Sem datas, vale enquanto estiver preenchido; apague o valor para encerrar.
+        Peça em promoção não recebe o desconto do plano.
+      </p>
+    </>
+  );
+}
 
 const cover = (product: Product) => product.images.find((i) => i.isCover) ?? product.images[0];
 
@@ -351,7 +434,7 @@ export function ProductsPage() {
                         <span className="tag gold">{AVAILABILITY_LABEL[product.availability]}</span>
                       </td>
                       <td className="num">
-                        {product.salePriceCents ? formatBRL(product.salePriceCents) : '—'}
+                        <SalePrice product={product} />
                       </td>
                       <td className="num">
                         {product.rentalPriceCents ? formatBRL(product.rentalPriceCents) : '—'}
@@ -452,7 +535,11 @@ function LookCard({ product, onEdit }: { product: Product; onEdit: () => void })
           {product.category ? ` · ${product.category.name}` : ''}
         </div>
         <div className="prices">
-          {product.salePriceCents ? <span>{formatBRL(product.salePriceCents)}</span> : null}
+          {product.salePriceCents ? (
+            <span>
+              <SalePrice product={product} />
+            </span>
+          ) : null}
           {product.rentalPriceCents ? (
             <span className="rent">aluguel {formatBRL(product.rentalPriceCents)}</span>
           ) : null}
@@ -487,6 +574,9 @@ function ProductForm({
     availability: initialAvailability,
     salePrice: '',
     rentalPrice: '',
+    promoPrice: '',
+    promoStart: '',
+    promoEnd: '',
     sizes: ['36', '38', '40', '42'] as string[],
     extraSizes: '',
     colors: [{ name: 'Único', hex: null }] as ColorDraft[],
@@ -544,6 +634,13 @@ function ProductForm({
         status: form.publish ? 'PUBLISHED' : 'DRAFT',
         salePriceCents: form.availability !== 'RENTAL' ? toCents(form.salePrice) : undefined,
         rentalPriceCents: form.availability !== 'SALE' ? toCents(form.rentalPrice) : undefined,
+        ...(form.availability !== 'RENTAL' && form.promoPrice.trim()
+          ? {
+              promoPriceCents: toCents(form.promoPrice),
+              promoStartsAt: dayStart(form.promoStart),
+              promoEndsAt: dayAfter(form.promoEnd),
+            }
+          : {}),
         freeShipping: form.freeShipping,
         isHighlighted: form.isHighlighted,
         variants: colors.flatMap((color) =>
@@ -631,6 +728,15 @@ function ProductForm({
             </div>
           ) : null}
         </div>
+
+        {form.availability !== 'RENTAL' ? (
+          <PromoFields
+            price={form.promoPrice}
+            start={form.promoStart}
+            end={form.promoEnd}
+            onChange={(key, value) => set(key, value)}
+          />
+        ) : null}
 
         <SizePicker
           selected={form.sizes}
@@ -731,6 +837,11 @@ function ProductEditor({
   const [name, setName] = useState(product.name);
   const [salePrice, setSalePrice] = useState(toReais(product.salePriceCents));
   const [rentalPrice, setRentalPrice] = useState(toReais(product.rentalPriceCents));
+  const [promo, setPromo] = useState({
+    promoPrice: toReais(product.promoPriceCents),
+    promoStart: toDayInput(product.promoStartsAt),
+    promoEnd: toDayInput(product.promoEndsAt, true),
+  });
   const [availability, setAvailability] = useState(product.availability);
   const [status, setStatus] = useState(product.status);
   const [freeShipping, setFreeShipping] = useState(product.freeShipping);
@@ -794,6 +905,11 @@ function ProductEditor({
         isHighlighted,
         salePriceCents: availability !== 'RENTAL' && salePrice ? toCents(salePrice) : undefined,
         rentalPriceCents: availability !== 'SALE' && rentalPrice ? toCents(rentalPrice) : undefined,
+        // Valor vazio encerra a promoção (null limpa no servidor).
+        promoPriceCents:
+          availability !== 'RENTAL' && promo.promoPrice.trim() ? toCents(promo.promoPrice) : null,
+        promoStartsAt: promo.promoPrice.trim() ? dayStart(promo.promoStart) : null,
+        promoEndsAt: promo.promoPrice.trim() ? dayAfter(promo.promoEnd) : null,
       });
 
       // Estoque vive na variante: só envia as que realmente mudaram.
@@ -883,6 +999,15 @@ function ProductEditor({
           </div>
         ) : null}
       </div>
+
+      {availability !== 'RENTAL' ? (
+        <PromoFields
+          price={promo.promoPrice}
+          start={promo.promoStart}
+          end={promo.promoEnd}
+          onChange={(key, value) => setPromo((current) => ({ ...current, [key]: value }))}
+        />
+      ) : null}
 
       <div className="row" style={{ gap: 22, marginBottom: 20 }}>
         <label className="check">

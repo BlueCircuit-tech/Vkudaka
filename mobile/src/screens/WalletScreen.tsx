@@ -9,9 +9,10 @@ import { PurchaseRulesModal } from '../components/PurchaseRulesModal';
 /**
  * Carteira digital (2.6) — menu apartado.
  *
- * A tela separa visualmente os dois saldos porque eles têm regras diferentes:
- *   • Saldo da carteira: paga compras, e usá-lo desativa o abatimento (RN-02).
- *   • Crédito do clube: abate a mensalidade, não expira, não paga compras.
+ * Desde 2026-11-11, 100% da mensalidade entra aqui como crédito VKUDAKA e
+ * paga peças da marca; o desconto fidelidade vale também pagando com créditos.
+ * O "crédito do clube" antigo (abate a mensalidade) só aparece se houver saldo
+ * remanescente dele.
  */
 
 interface WalletData {
@@ -32,6 +33,7 @@ const TOP_UP_OPTIONS = [5_000, 10_000, 20_000, 50_000];
 
 const TYPE_LABEL: Record<string, string> = {
   TOPUP: 'Recarga',
+  SUBSCRIPTION: 'Créditos da assinatura',
   PURCHASE: 'Compra',
   REFUND: 'Estorno',
   ADJUSTMENT_CREDIT: 'Ajuste do clube',
@@ -73,26 +75,23 @@ export function WalletScreen() {
         <Text style={typography.display}>Carteira</Text>
 
         <Card style={styles.balanceCard}>
-          <Label>Saldo disponível</Label>
+          <Label>Créditos VKUDAKA</Label>
           <Text style={styles.balance}>{formatBRL(data.balanceCents)}</Text>
-          <Caption>Paga suas compras no app.</Caption>
+          <Caption>100% da sua mensalidade entra aqui. Use para comprar peças da marca.</Caption>
         </Card>
 
-        <Card style={styles.creditCard}>
-          <Label>Crédito do clube</Label>
-          <Text style={styles.credit}>{formatBRL(data.clubCreditCents)}</Text>
-          <Caption>
-            Abate a próxima mensalidade. Sem teto e sem prazo para usar.
-          </Caption>
-        </Card>
+        {data.clubCreditCents > 0 ? (
+          <Card style={styles.creditCard}>
+            <Label>Crédito de mensalidade</Label>
+            <Text style={styles.credit}>{formatBRL(data.clubCreditCents)}</Text>
+            <Caption>Saldo da regra antiga: abate a próxima mensalidade. Não expira.</Caption>
+          </Card>
+        ) : null}
 
         <View style={styles.notice}>
-          <Body>
-            Ao usar o saldo da carteira em uma compra, o abatimento do plano não é aplicado
-            àquele pedido.
-          </Body>
+          <Body>Seu desconto fidelidade vale também quando você paga com os créditos.</Body>
           <Button
-            title="Como funciona o abatimento"
+            title="Como funcionam os créditos"
             variant="quiet"
             onPress={() => setRulesOpen(true)}
           />

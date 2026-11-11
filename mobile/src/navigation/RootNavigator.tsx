@@ -23,6 +23,7 @@ import { CommunityScreen } from '../screens/CommunityScreen';
 import { WalletScreen } from '../screens/WalletScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SubscriptionRequiredScreen } from '../screens/SubscriptionRequiredScreen';
+import { PlansScreen } from '../screens/PlansScreen';
 
 export type RootStackParamList = {
   Tabs: undefined;
@@ -34,6 +35,7 @@ export type RootStackParamList = {
   Looks: undefined;
   /** Aluguel (2.3) — seção própria, alcançada pela loja. */
   Rental: undefined;
+  Plans: undefined;
   SubscriptionRequired: { storeUrl?: string } | undefined;
 };
 
@@ -133,6 +135,8 @@ export function RootNavigator() {
         options={{ title: 'Escolha seu Look' }}
       />
       <Stack.Screen name="Rental" component={RentalScreen} options={{ title: 'Aluguel' }} />
+      {/* Título em caixa alta: a Carla não tem minúsculas acentuadas. */}
+      <Stack.Screen name="Plans" component={PlansScreen} options={{ title: 'PLANOS' }} />
       <Stack.Screen
         name="ProductDetail"
         component={ProductDetailScreen}

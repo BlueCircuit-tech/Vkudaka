@@ -166,3 +166,111 @@ export async function dailySeries(range: DashboardRange) {
 
   return [...buckets.entries()].map(([date, values]) => ({ date, ...values }));
 }
+
+const MONTHS_BY_INTERVAL = { MONTHLY: 1, QUARTERLY: 3, SEMIANNUAL: 6, ANNUAL: 12 } as const;
+
+/**
+ * Relatório do clube (planos e créditos — 2026-11-11).
+ *
+ *  • Assinantes por plano e MRR: assinaturas ativas agora; o preço travado no
+ *    contrato é normalizado para 1 mês (trimestral ÷ 3 etc.).
+ *  • Créditos em aberto (passivo): soma dos saldos de carteira — com 100% da
+ *    mensalidade virando crédito, é dinheiro recebido que ainda vai virar peça.
+ *  • Créditos gerados/usados no período: lançamentos de assinatura (+) e
+ *    compras pagas com saldo (−).
+ *  • Taxa de upgrade: trocas para um plano mais caro no período ÷ (essas trocas
+ *    + assinantes ativos que ainda têm um plano acima para onde subir).
+ */
+export async function clubReport(range: DashboardRange) {
+  const now = new Date();
+  const [active, plans, walletTotals, generated, used, newInPeriod] = await Promise.all([
+    prisma.subscription.findMany({
+      where: { status: { in: ['ACTIVE', 'TRIALING'] }, currentPeriodEnd: { gte: now } },
+      select: { userId: true, planId: true, priceCents: true },
+    }),
+    prisma.plan.findMany({
+      select: {
+        id: true,
+        name: true,
+        priceCents: true,
+        interval: true,
+        intervalCount: true,
+        isActive: true,
+        displayOrder: true,
+      },
+      orderBy: { displayOrder: 'asc' },
+    }),
+    prisma.wallet.aggregate({ _sum: { balanceCents: true }, _count: true }),
+    prisma.walletTransaction.aggregate({
+      where: { type: 'SUBSCRIPTION', createdAt: { gte: range.from, lte: range.to } },
+      _sum: { amountCents: true },
+    }),
+    prisma.walletTransaction.aggregate({
+      where: { type: 'PURCHASE', createdAt: { gte: range.from, lte: range.to } },
+      _sum: { amountCents: true },
+    }),
+    prisma.subscription.findMany({
+      where: { createdAt: { gte: range.from, lte: range.to } },
+      select: { id: true, userId: true, createdAt: true, plan: { select: { priceCents: true } } },
+    }),
+  ]);
+
+  const planById = new Map(plans.map((p) => [p.id, p]));
+  const monthly = (planId: string, priceCents: number) => {
+    const plan = planById.get(planId);
+    const months = plan ? MONTHS_BY_INTERVAL[plan.interval] * plan.intervalCount : 1;
+    return Math.round(priceCents / months);
+  };
+
+  const byPlan = plans
+    .map((plan) => {
+      const subs = active.filter((s) => s.planId === plan.id);
+      return {
+        planId: plan.id,
+        planName: plan.name,
+        isActive: plan.isActive,
+        subscribers: subs.length,
+        mrrCents: subs.reduce((sum, s) => sum + monthly(s.planId, s.priceCents), 0),
+      };
+    })
+    .filter((row) => row.isActive || row.subscribers > 0);
+
+  // Upgrades: assinatura nova cuja anterior (mesma cliente) era de plano mais barato.
+  const userIds = [...new Set(newInPeriod.map((s) => s.userId))];
+  const history = userIds.length
+    ? await prisma.subscription.findMany({
+        where: { userId: { in: userIds } },
+        select: { id: true, userId: true, createdAt: true, plan: { select: { priceCents: true } } },
+        orderBy: { createdAt: 'asc' },
+      })
+    : [];
+  const upgrades = newInPeriod.filter((sub) => {
+    const previous = history
+      .filter((h) => h.userId === sub.userId && h.createdAt < sub.createdAt && h.id !== sub.id)
+      .at(-1);
+    return previous ? sub.plan.priceCents > previous.plan.priceCents : false;
+  }).length;
+
+  const topActivePrice = Math.max(0, ...plans.filter((p) => p.isActive).map((p) => p.priceCents));
+  const canUpgrade = active.filter(
+    (s) => (planById.get(s.planId)?.priceCents ?? topActivePrice) < topActivePrice,
+  ).length;
+
+  return {
+    period: range,
+    activeSubscribers: active.length,
+    mrrCents: byPlan.reduce((sum, row) => sum + row.mrrCents, 0),
+    byPlan,
+    credits: {
+      /** Saldo total das carteiras: créditos recebidos e ainda não usados (passivo). */
+      outstandingCents: walletTotals._sum.balanceCents ?? 0,
+      generatedCents: generated._sum.amountCents ?? 0,
+      usedCents: Math.abs(used._sum.amountCents ?? 0),
+    },
+    upgrades: {
+      count: upgrades,
+      eligible: canUpgrade,
+      rate: upgrades + canUpgrade > 0 ? upgrades / (upgrades + canUpgrade) : 0,
+    },
+  };
+}

@@ -18,6 +18,26 @@ Implementação: `middleware/requireActiveSubscriber.ts`.
 
 ---
 
+## Atualização de 2026-11-11 — créditos VKUDAKA e desconto fidelidade
+
+Decisão da direção (via Rafael), que **substitui** partes da RN-02 e da RN-05 abaixo:
+
+* **100% da mensalidade vira crédito VKUDAKA.** Ao registrar o pagamento da assinatura no CRM
+  (`POST /admin/users/:id/subscription`), o valor pago (preço do contrato × meses, ou o valor
+  informado; 0 = cortesia) entra na carteira como `WalletTransaction` do tipo `SUBSCRIPTION`.
+* **Desconto fidelidade na hora da compra.** O percentual do plano (10% Essência, 15% Premium)
+  passa a ser `IMMEDIATE_DISCOUNT` (padrão do banco e dos planos). Nesse modo, **usar créditos
+  da carteira não cancela o desconto**: o desconto sai primeiro e a carteira cobre o restante.
+  O modo `CREDIT_NEXT_INVOICE` continua no código, com a regra antiga (bloqueia ao usar saldo).
+* **Peça em promoção** (valor promocional de venda, com início/fim opcionais) **não recebe** o
+  desconto fidelidade: o item entra no motor com `noRebate` e fica fora da base. Pedido só com
+  peças em promoção registra o motivo `PROMO_ITEMS`.
+* Planos têm preço "de" (`compareAtPriceCents`), selo de preço (`promoLabel`) e selo de
+  destaque (`highlightLabel`); cada benefício pode virar linha da tabela comparativa do app
+  (`compareLabel`/`compareValue`).
+
+---
+
 ## RN-02 — Abatimento (regra estrita)
 
 > O desconto (ex.: 10% Signature, 5% Essence) recai sobre a compra e **gera crédito para a

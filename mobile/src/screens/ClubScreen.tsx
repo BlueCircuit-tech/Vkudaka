@@ -10,7 +10,8 @@ import { Body, Caption, Card, Label, Loading, Screen } from '../components/ui';
  *
  * Ordem da tela, do mais importante para o menos:
  *   1. Boas-vindas + logo (identidade)
- *   2. Cartão do clube: plano, crédito acumulado, próxima mensalidade
+ *   2. Cartão do clube: plano, créditos VKUDAKA (100% da mensalidade vira
+ *      crédito na carteira — regra de 2026-11-11), renovação e benefícios
  *   3. Atalhos — "Escolha seu Look" primeiro (nome aprovado pela direção para o
  *      atalho de aluguel do protótipo antigo), depois loja, eventos, carteira
  *   4. Contato direto: WhatsApp e Instagram
@@ -87,32 +88,34 @@ export function ClubScreen({ navigation }: { navigation: { navigate: (screen: st
             <Label>Clube{data.planName ? ` · ${data.planName}` : ''}</Label>
             {data.rebatePercent > 0 ? (
               <View style={styles.chip}>
-                <Text style={styles.chipText}>{data.rebatePercent}% de abatimento</Text>
+                <Text style={styles.chipText}>{data.rebatePercent}% de desconto fidelidade</Text>
               </View>
             ) : null}
           </View>
 
-          {data.nextInvoice ? (
+          {data.isSubscriber ? (
             <>
-              <Caption>Próxima mensalidade</Caption>
-              <Text style={styles.amount}>{formatBRL(data.nextInvoice.netCents)}</Text>
-              {data.nextInvoice.creditCents > 0 ? (
-                <Caption>
-                  {formatBRL(data.nextInvoice.grossCents)} − {formatBRL(data.nextInvoice.creditCents)}{' '}
-                  de crédito das suas compras
-                </Caption>
-              ) : (
-                <Caption>Compre sem usar o saldo da carteira para gerar crédito aqui.</Caption>
-              )}
-              {data.nextInvoice.carryOverCents > 0 ? (
-                <Caption>
-                  {formatBRL(data.nextInvoice.carryOverCents)} seguem para as próximas — crédito não expira.
-                </Caption>
+              <Caption>Créditos VKUDAKA</Caption>
+              <Text style={styles.amount}>{formatBRL(data.walletBalanceCents)}</Text>
+              <Caption>100% da sua mensalidade vira crédito para usar em peças da marca.</Caption>
+              {data.nextInvoice ? (
+                <Caption>Renova em {new Date(data.nextInvoice.dueDate).toLocaleDateString('pt-BR')}.</Caption>
               ) : null}
             </>
           ) : (
-            <Body muted>Assine o clube para acompanhar sua mensalidade por aqui.</Body>
+            <Body muted>
+              Assine o clube: 100% da mensalidade vira crédito para comprar peças VKUDAKA.
+            </Body>
           )}
+
+          <Pressable
+            onPress={() => navigation.navigate('Plans')}
+            style={({ pressed }) => [styles.plansLink, pressed && { opacity: 0.6 }]}
+          >
+            <Text style={styles.plansLinkText}>
+              {data.isSubscriber ? 'Planos e benefícios ›' : 'Conheça os planos ›'}
+            </Text>
+          </Pressable>
 
           {/* RN-12 — peça do trimestre */}
           {data.quarterlyRental.eligible ? (
@@ -141,19 +144,6 @@ export function ClubScreen({ navigation }: { navigation: { navigate: (screen: st
           ) : null}
         </Card>
 
-        <View style={styles.balances}>
-          <Card style={styles.balanceCard}>
-            <Caption>Carteira</Caption>
-            <Text style={styles.balanceValue}>{formatBRL(data.walletBalanceCents)}</Text>
-            <Caption>paga suas compras</Caption>
-          </Card>
-          <Card style={styles.balanceCard}>
-            <Caption>Crédito do clube</Caption>
-            <Text style={styles.balanceValue}>{formatBRL(data.clubCreditCents)}</Text>
-            <Caption>abate a mensalidade</Caption>
-          </Card>
-        </View>
-
         <View style={styles.shortcuts}>
           <Shortcut
             title="Escolha seu Look"
@@ -163,6 +153,11 @@ export function ClubScreen({ navigation }: { navigation: { navigate: (screen: st
           <Shortcut title="Loja" subtitle="Peças da coleção" onPress={() => navigation.navigate('Loja')} />
           <Shortcut title="Eventos" subtitle="Confirme sua presença" onPress={() => navigation.navigate('Eventos')} />
           <Shortcut title="Carteira" subtitle="Créditos e recargas" onPress={() => navigation.navigate('Carteira')} />
+          <Shortcut
+            title="Planos e benefícios"
+            subtitle="Créditos, desconto e eventos"
+            onPress={() => navigation.navigate('Plans')}
+          />
         </View>
 
         {/* Contato direto com o clube */}
@@ -232,9 +227,8 @@ const styles = StyleSheet.create({
   },
   benefit: { flexDirection: 'row', gap: spacing(1), alignItems: 'flex-start' },
   benefitDot: { color: colors.goldDeep, fontSize: 11, marginTop: 4 },
-  balances: { flexDirection: 'row', gap: spacing(1.5) },
-  balanceCard: { flex: 1, gap: 2 },
-  balanceValue: { fontFamily: fonts.display, fontSize: 20, color: colors.goldDeep },
+  plansLink: { paddingTop: spacing(1) },
+  plansLinkText: { fontFamily: fonts.body, fontSize: 14, color: colors.goldDeep },
   shortcuts: { gap: spacing(1) },
   shortcut: {
     flexDirection: 'row',

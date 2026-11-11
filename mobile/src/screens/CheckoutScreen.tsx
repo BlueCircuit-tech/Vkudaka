@@ -15,10 +15,11 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 /**
  * Fechamento do pedido (2.6 / RN-02 / RN-03).
  *
- * A tela existe para tornar a escolha da RN-02 explícita e reversível antes do
- * pagamento: usar o saldo da carteira agora, ou preservar o abatimento e gerar
- * crédito na próxima mensalidade. Todo número exibido vem de `POST /orders/quote`
- * — nenhuma conta é feita no cliente.
+ * Desde 2026-11-11 a mensalidade inteira vira crédito na carteira e o desconto
+ * fidelidade do plano vale na hora, inclusive pagando com créditos. (Plano no
+ * modo antigo, "crédito na próxima mensalidade", ainda perde o benefício ao
+ * usar saldo — a mensagem do servidor explica.) Todo número exibido vem de
+ * `POST /orders/quote` — nenhuma conta é feita no cliente.
  */
 
 interface Quote {
@@ -138,7 +139,7 @@ export function CheckoutScreen() {
           </View>
           {quote.immediateDiscountCents > 0 ? (
             <View style={styles.line}>
-              <Caption>Desconto do plano</Caption>
+              <Caption>Desconto fidelidade</Caption>
               <Caption>−{formatBRL(quote.immediateDiscountCents)}</Caption>
             </View>
           ) : null}
@@ -153,7 +154,7 @@ export function CheckoutScreen() {
           <View style={styles.walletHeader}>
             <View style={{ flex: 1 }}>
               <Label>Carteira</Label>
-              <Body>Usar {formatBRL(wallet.balanceCents)} de saldo</Body>
+              <Body>Usar {formatBRL(wallet.balanceCents)} de créditos</Body>
             </View>
             <Switch
               value={useWallet}
@@ -205,7 +206,7 @@ export function CheckoutScreen() {
                 </View>
               ) : null}
             </>
-          ) : quote.rebateEligible ? (
+          ) : quote.rebateEligible && quote.rebateCreditCents > 0 ? (
             <View style={styles.line}>
               <Caption>Crédito gerado</Caption>
               <Text style={styles.credit}>+{formatBRL(quote.rebateCreditCents)}</Text>

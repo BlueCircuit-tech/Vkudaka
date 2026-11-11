@@ -32,7 +32,7 @@ interface MovementInput {
   createdById?: string;
 }
 
-const CREDIT_TYPES: WalletTxType[] = ['TOPUP', 'REFUND', 'ADJUSTMENT_CREDIT'];
+const CREDIT_TYPES: WalletTxType[] = ['TOPUP', 'REFUND', 'ADJUSTMENT_CREDIT', 'SUBSCRIPTION'];
 
 /**
  * Registra um movimento e atualiza o cache de saldo.

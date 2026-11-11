@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { api, uploadMedia } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -89,6 +89,7 @@ const BODY_FIELDS = [
 type Draft = Record<string, string>;
 
 export function ProfileScreen() {
+  const navigation = useNavigation();
   const { signOut, forgetSession, refresh } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [draft, setDraft] = useState<Draft>({});
@@ -243,8 +244,8 @@ export function ProfileScreen() {
             <>
               <Text style={typography.title}>{profile.subscription.planName}</Text>
               <Body>
-                {profile.subscription.rebatePercent}% de abatimento em crédito na próxima
-                mensalidade a cada compra.
+                {profile.subscription.rebatePercent}% de desconto fidelidade em toda compra. 100% da
+                mensalidade vira crédito VKUDAKA na sua carteira.
               </Body>
               <Caption>
                 Renova em{' '}
@@ -254,6 +255,13 @@ export function ProfileScreen() {
           ) : (
             <Body muted>Você ainda não tem assinatura ativa.</Body>
           )}
+          <Button
+            title={profile.subscription ? 'Planos e benefícios' : 'Conheça os planos'}
+            variant="quiet"
+            onPress={() =>
+              (navigation as never as { navigate: (s: string) => void }).navigate('Plans')
+            }
+          />
         </Card>
 
         {/* ── Dados pessoais ── */}

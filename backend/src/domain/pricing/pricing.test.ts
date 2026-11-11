@@ -169,20 +169,31 @@ describe('RN-02 — abatimento só quando NÃO usa a carteira', () => {
     });
   });
 
-  it('IMMEDIATE_DISCOUNT com carteira: sem desconto, total cheio', () => {
+  it('IMMEDIATE_DISCOUNT (desconto fidelidade) vale pagando com créditos da carteira', () => {
+    // Regra de 2026-11-11: a mensalidade inteira vira crédito; o desconto não
+    // depende de como a cliente paga.
     const r = quote({
       rebateMode: 'IMMEDIATE_DISCOUNT',
       walletBalanceCents: 10_000,
       requestedWalletCents: 10_000,
     });
-    expect(r.immediateDiscountCents).toBe(0);
-    expect(r.totalCents).toBe(30_000);
-    expect(r.gatewayAmountCents).toBe(20_000);
-    expect(r.alternativeWithoutWallet).toEqual({
-      totalCents: 27_000,
-      rebateCreditCents: 0,
-      immediateDiscountCents: 3_000,
+    expect(r.rebateEligible).toBe(true);
+    expect(r.immediateDiscountCents).toBe(3_000);
+    expect(r.totalCents).toBe(27_000);
+    expect(r.walletAppliedCents).toBe(10_000);
+    expect(r.gatewayAmountCents).toBe(17_000);
+    expect(r.alternativeWithoutWallet).toBeNull();
+  });
+
+  it('IMMEDIATE_DISCOUNT: carteira cobre o total já com desconto, nunca mais que isso', () => {
+    const r = quote({
+      rebateMode: 'IMMEDIATE_DISCOUNT',
+      walletBalanceCents: 50_000,
+      requestedWalletCents: 50_000,
     });
+    expect(r.totalCents).toBe(27_000);
+    expect(r.walletAppliedCents).toBe(27_000);
+    expect(r.gatewayAmountCents).toBe(0);
   });
 });
 

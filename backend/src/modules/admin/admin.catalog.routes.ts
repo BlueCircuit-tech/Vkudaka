@@ -25,6 +25,33 @@ const variantSchema = z.object({
   rentalStock: z.number().int().min(0).default(0),
 });
 
+/** Data opcional do formulário: vazio/null limpa o campo. */
+const optionalDate = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.coerce.date().nullable().optional(),
+);
+
+type PromoInput = {
+  salePriceCents?: number | null;
+  promoPriceCents?: number | null;
+  promoStartsAt?: Date | null;
+  promoEndsAt?: Date | null;
+};
+
+/** Coerência da promoção — devolve a mensagem do problema ou null. */
+function promoProblem(p: PromoInput): string | null {
+  if (p.promoPriceCents != null) {
+    if (p.salePriceCents == null) return 'Valor promocional exige preço de venda.';
+    if (p.promoPriceCents >= p.salePriceCents) {
+      return 'O valor promocional precisa ser menor que o preço de venda.';
+    }
+  }
+  if (p.promoStartsAt && p.promoEndsAt && p.promoEndsAt <= p.promoStartsAt) {
+    return 'O fim da promoção precisa ser depois do início.';
+  }
+  return null;
+}
+
 const productBase = z.object({
     sku: z.string().min(1).max(40),
     name: z.string().min(2).max(160),
@@ -36,6 +63,10 @@ const productBase = z.object({
     status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).default('DRAFT'),
     salePriceCents: z.number().int().min(0).optional(),
     rentalPriceCents: z.number().int().min(0).optional(),
+    /** Valor promocional de venda; null remove a promoção. */
+    promoPriceCents: z.number().int().min(1).nullable().optional(),
+    promoStartsAt: optionalDate,
+    promoEndsAt: optionalDate,
     rentalDays: z.number().int().min(1).max(30).default(4),
     rentalDepositCents: z.number().int().min(0).optional(),
     composition: z.string().max(240).optional(),
@@ -123,6 +154,8 @@ adminCatalogRouter.post(
   validate(productSchema),
   asyncHandler(async (req, res) => {
     const body = req.body as z.infer<typeof productSchema>;
+    const problem = promoProblem(body);
+    if (problem) throw badRequest('INVALID_PROMO', problem);
 
     const product = await prisma.product.create({
       data: {
@@ -159,6 +192,10 @@ adminCatalogRouter.patch(
   asyncHandler(async (req, res) => {
     const body = req.body as Partial<z.infer<typeof productBase>>;
     const before = await prisma.product.findUniqueOrThrow({ where: { id: param(req, 'id') } });
+
+    // A promoção é validada contra o que fica gravado (o PATCH pode mandar só parte).
+    const problem = promoProblem({ ...before, ...body });
+    if (problem) throw badRequest('INVALID_PROMO', problem);
 
     const product = await prisma.product.update({
       where: { id: param(req, 'id') },
