@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { optionalBirthDate } from '../../lib/br-date.js';
 import { prisma } from '../../lib/prisma.js';
 import { asyncHandler, param } from '../../lib/http.js';
 import { notFound } from '../../lib/errors.js';
@@ -82,7 +83,7 @@ usersRouter.patch(
     z.object({
       fullName: z.string().min(3).max(160).optional(),
       phone: z.string().transform(onlyDigits).optional(),
-      birthDate: z.coerce.date().optional(),
+      birthDate: optionalBirthDate,
       instagram: z
         .string()
         .max(60)

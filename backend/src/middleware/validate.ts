@@ -17,13 +17,22 @@ type Source = 'body' | 'query' | 'params';
  * por um getter e não aceita atribuição direta.
  */
 export const validate =
-  (schema: AnyZodObject | ZodTypeAny, source: Source = 'body') =>
+  (
+    schema: AnyZodObject | ZodTypeAny,
+    source: Source = 'body',
+    /**
+     * `firstIssueAsMessage`: usa a mensagem do primeiro erro como `message` da
+     * resposta. Só para schemas com mensagens em português que nomeiam o campo
+     * (ex.: cadastro) — o app mostra `message` direto para a pessoa.
+     */
+    options: { firstIssueAsMessage?: boolean } = {},
+  ) =>
   (req: Request, _res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req[source]);
     if (!result.success) {
-      return next(
-        badRequest('VALIDATION_ERROR', 'Dados inválidos.', result.error.flatten().fieldErrors),
-      );
+      const message =
+        (options.firstIssueAsMessage && result.error.issues[0]?.message) || 'Dados inválidos.';
+      return next(badRequest('VALIDATION_ERROR', message, result.error.flatten().fieldErrors));
     }
     const target = req[source] as Record<string, unknown>;
     for (const key of Object.keys(target)) delete target[key];

@@ -12,42 +12,12 @@ import { randomToken } from '../../lib/codes.js';
 import { validate } from '../../middleware/validate.js';
 import { authenticate } from '../../middleware/auth.js';
 import { getActiveSubscription } from '../subscriptions/subscriptions.service.js';
-import { isValidCPF, onlyDigits } from './cpf.js';
+import { onlyDigits } from './cpf.js';
+import { signUpSchema } from './signup.schema.js';
 
 export const authRouter: Router = Router();
 
-// ── Schemas (2.1) — * = obrigatório no requisito ───────────────────────────────
-
-const signUpSchema = z.object({
-  fullName: z.string().min(3).max(160), // *
-  cpf: z
-    .string()
-    .transform(onlyDigits)
-    .refine(isValidCPF, 'CPF inválido'), // *
-  email: z.string().email().max(160).toLowerCase(), // *
-  phone: z.string().transform(onlyDigits).pipe(z.string().min(10).max(13)), // *
-  password: z.string().min(8, 'Mínimo de 8 caracteres'),
-  birthDate: z.coerce.date().optional(),
-  instagram: z
-    .string()
-    .max(60)
-    .transform((v) => v.replace(/^@/, ''))
-    .optional(),
-  gender: z
-    .enum(['FEMININO', 'MASCULINO', 'NAO_BINARIO', 'OUTRO', 'PREFIRO_NAO_INFORMAR'])
-    .optional(),
-  address: z.object({
-    // * endereço é obrigatório no cadastro
-    zipCode: z.string().transform(onlyDigits).pipe(z.string().length(8)),
-    street: z.string().min(3).max(160),
-    number: z.string().max(20),
-    complement: z.string().max(80).optional(),
-    district: z.string().min(2).max(80),
-    city: z.string().min(2).max(80),
-    state: z.string().length(2).toUpperCase(),
-  }),
-  acceptedTerms: z.literal(true, { errorMap: () => ({ message: 'É preciso aceitar os termos' }) }),
-});
+// ── Schemas ───────────────────────────────────────────────────────────────────
 
 const signInSchema = z.object({
   // Aceita e-mail ou CPF no mesmo campo — o app não pergunta qual é qual.
@@ -76,7 +46,7 @@ async function issueSession(userId: string, role: 'MEMBER' | 'GATE' | 'STAFF' | 
 
 authRouter.post(
   '/signup',
-  validate(signUpSchema),
+  validate(signUpSchema, 'body', { firstIssueAsMessage: true }),
   asyncHandler(async (req, res) => {
     const body = req.body as z.infer<typeof signUpSchema>;
 
