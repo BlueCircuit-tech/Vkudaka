@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { api, ApiError } from '../api/client';
 import { colors, radius, spacing, typography } from '../theme/theme';
@@ -8,6 +8,13 @@ import { ProductGrid, type ProductSummary, type QuarterlyRental } from '../compo
 import { QuarterlyNotice } from '../components/QuarterlyNotice';
 
 type Mode = 'SALE' | 'RENTAL';
+
+interface Category {
+  id: string;
+  name: string;
+  /** Vitrine onde aparece: BOTH = venda e locação. */
+  scope: 'SALE' | 'RENTAL' | 'BOTH';
+}
 
 /**
  * Loja — vitrine de COMPRA (2.3), o foco do app.
@@ -19,23 +26,31 @@ type Mode = 'SALE' | 'RENTAL';
  * Filtro Comprar | Alugar no topo (pedido da direção, 2026-11-11): antes o
  * aluguel só aparecia num link de rodapé e quase ninguém achava. Comprar
  * continua sendo o padrão.
+ *
+ * Categorias (Alfaiataria, Moda Festa…) logo abaixo: vêm do CRM e cada uma diz
+ * se vale para venda, locação ou ambas. "Todas" é o padrão.
  */
 export function ShopScreen() {
   const navigation = useNavigation<never>();
   const [mode, setMode] = useState<Mode>('SALE');
   const [products, setProducts] = useState<ProductSummary[] | null>(null);
   const [quarterly, setQuarterly] = useState<QuarterlyRental | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+
+  const visibleCategories = categories.filter((c) => c.scope === 'BOTH' || c.scope === mode);
 
   const load = useCallback(async () => {
     try {
+      const query = categoryId ? `?categoryId=${categoryId}` : '';
       if (mode === 'RENTAL') {
         const page = await api.get<{ data: ProductSummary[]; quarterlyRental: QuarterlyRental }>(
-          '/catalog/rental',
+          `/catalog/rental${query}`,
         );
         setProducts(page.data);
         setQuarterly(page.quarterlyRental);
       } else {
-        const page = await api.get<{ data: ProductSummary[] }>('/catalog/shop');
+        const page = await api.get<{ data: ProductSummary[] }>(`/catalog/shop${query}`);
         setProducts(page.data);
       }
     } catch (error) {
@@ -49,18 +64,36 @@ export function ShopScreen() {
       }
       throw error;
     }
-  }, [navigation, mode]);
+  }, [navigation, mode, categoryId]);
 
   const switchMode = (next: Mode) => {
     if (next === mode) return;
     setProducts(null);
     setMode(next);
+    // A categoria escolhida só continua se também existir na outra vitrine.
+    const current = categories.find((c) => c.id === categoryId);
+    if (current && current.scope !== 'BOTH' && current.scope !== next) setCategoryId(null);
+  };
+
+  const chooseCategory = (next: string | null) => {
+    if (next === categoryId) return;
+    setProducts(null);
+    setCategoryId(next);
   };
 
   useFocusEffect(
     useCallback(() => {
       void load();
     }, [load]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      void api
+        .get<Category[]>('/catalog/categories')
+        .then(setCategories)
+        .catch(() => undefined);
+    }, []),
   );
 
   if (!products) return <Loading />;
@@ -105,10 +138,34 @@ export function ShopScreen() {
               })}
             </View>
 
+            {visibleCategories.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categories}
+              >
+                {[{ id: null, name: 'Todas' }, ...visibleCategories].map((category) => {
+                  const active = category.id === categoryId;
+                  return (
+                    <Pressable
+                      key={category.id ?? 'all'}
+                      onPress={() => chooseCategory(category.id)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      style={[styles.category, active && styles.categoryActive]}
+                    >
+                      <Text style={[styles.categoryText, active && styles.categoryTextActive]}>
+                        {category.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+
             {mode === 'SALE' ? (
               <Caption>
-                Assinantes têm desconto fidelidade em toda compra — inclusive pagando com
-                créditos.
+                Assinantes têm desconto fidelidade em toda compra — inclusive pagando com créditos.
               </Caption>
             ) : (
               <>
@@ -188,4 +245,15 @@ const styles = StyleSheet.create({
   segmentItemActive: { backgroundColor: colors.gold },
   segmentText: { ...typography.body, fontSize: 14, color: colors.muted },
   segmentTextActive: { color: colors.ink, fontWeight: '600' },
+  categories: { gap: spacing(1), paddingVertical: spacing(1) },
+  category: {
+    paddingHorizontal: spacing(1.75),
+    paddingVertical: spacing(0.75),
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  categoryActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  categoryText: { ...typography.caption, fontSize: 13, color: colors.ink },
+  categoryTextActive: { color: colors.background },
 });

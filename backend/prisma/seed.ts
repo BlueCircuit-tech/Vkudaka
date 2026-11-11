@@ -169,18 +169,16 @@ async function main() {
   }
 
   console.log('▸ Catálogo');
-  const compras = await prisma.category.upsert({
-    where: { slug: 'colecao' },
+  // Categorias de roupa (2026-11-11): valem para venda e locação.
+  const alfaiataria = await prisma.category.upsert({
+    where: { slug: 'alfaiataria' },
     update: {},
-    create: { name: 'Coleção', slug: 'colecao', scope: 'SALE', displayOrder: 0 },
+    create: { name: 'Alfaiataria', slug: 'alfaiataria', scope: 'BOTH', displayOrder: 0 },
   });
-
-  // "Escolha seu Look" virou vitrine de compra; esta categoria agrupa o que
-  // restou do aluguel, que segue no catálogo e no CRM em segundo plano.
-  const aluguel = await prisma.category.upsert({
-    where: { slug: 'looks' },
-    update: { name: 'Aluguel', scope: 'RENTAL' },
-    create: { name: 'Aluguel', slug: 'looks', scope: 'RENTAL', displayOrder: 1 },
+  const modaFesta = await prisma.category.upsert({
+    where: { slug: 'moda-festa' },
+    update: {},
+    create: { name: 'Moda Festa', slug: 'moda-festa', scope: 'BOTH', displayOrder: 1 },
   });
 
   const products = [
@@ -240,7 +238,7 @@ async function main() {
         name: item.name,
         slug: item.slug,
         description: 'Peça oficial VKUDAKA.',
-        categoryId: item.availability === 'RENTAL' ? aluguel.id : compras.id,
+        categoryId: item.availability === 'SALE' ? alfaiataria.id : modaFesta.id,
         availability: item.availability,
         status: 'PUBLISHED',
         publishedAt: new Date(),

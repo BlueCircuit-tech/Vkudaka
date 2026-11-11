@@ -57,7 +57,7 @@ const productBase = z.object({
     name: z.string().min(2).max(160),
     slug: z.string().min(2).max(180).regex(/^[a-z0-9-]+$/),
     description: z.string().max(4000).optional(),
-    categoryId: z.string().uuid().optional(),
+    categoryId: z.string().uuid().nullable().optional(),
     /** 3.3 — define claramente se a peça é para Venda, Aluguel ou Ambos. */
     availability: z.enum(['SALE', 'RENTAL', 'BOTH']),
     status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).default('DRAFT'),
@@ -112,6 +112,7 @@ const productListQuery = z.object({
     (v) => (v === '' ? undefined : v),
     z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
   ),
+  categoryId: z.preprocess((v) => (v === '' ? undefined : v), z.string().uuid().optional()),
   page: z.coerce.number().int().min(1).optional(),
   perPage: z.coerce.number().int().min(1).max(100).optional(),
 });
@@ -132,6 +133,7 @@ adminCatalogRouter.get(
       deletedAt: null,
       ...(query.availability ? SCOPE[query.availability] : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.categoryId ? { categoryId: query.categoryId } : {}),
     };
 
     const [products, total] = await Promise.all([
@@ -295,19 +297,51 @@ adminCatalogRouter.delete(
   }),
 );
 
+// ── Categorias de roupa (Alfaiataria, Moda Festa…) ───────────────────────────
+// `scope` diz em qual vitrine a categoria aparece: BOTH = venda e locação.
+
+const categorySchema = z.object({
+  name: z.string().min(2).max(80),
+  slug: z.string().min(2).max(80).regex(/^[a-z0-9-]+$/),
+  scope: z.enum(['SALE', 'RENTAL', 'BOTH']).default('BOTH'),
+  displayOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true),
+  imageUrl: z.string().url().optional(),
+});
+
+adminCatalogRouter.get(
+  '/categories',
+  asyncHandler(async (_req, res) => {
+    res.json(
+      await prisma.category.findMany({
+        include: { _count: { select: { products: { where: { deletedAt: null } } } } },
+        orderBy: [{ isActive: 'desc' }, { displayOrder: 'asc' }, { name: 'asc' }],
+      }),
+    );
+  }),
+);
+
 adminCatalogRouter.post(
   '/categories',
-  validate(
-    z.object({
-      name: z.string().min(2).max(80),
-      slug: z.string().min(2).max(80).regex(/^[a-z0-9-]+$/),
-      scope: z.enum(['SALE', 'RENTAL', 'BOTH']).default('SALE'),
-      displayOrder: z.number().int().default(0),
-      imageUrl: z.string().url().optional(),
-    }),
-  ),
+  validate(categorySchema),
   asyncHandler(async (req, res) => {
-    res.status(201).json(await prisma.category.create({ data: req.body as never }));
+    const body = req.body as z.infer<typeof categorySchema>;
+    const taken = await prisma.category.findUnique({ where: { slug: body.slug } });
+    if (taken) throw badRequest('CATEGORY_EXISTS', `Já existe a categoria "${taken.name}".`);
+    res.status(201).json(await prisma.category.create({ data: body }));
+  }),
+);
+
+adminCatalogRouter.patch(
+  '/categories/:id',
+  validate(categorySchema.omit({ slug: true }).partial()),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await prisma.category.update({
+        where: { id: param(req, 'id') },
+        data: req.body as Partial<z.infer<typeof categorySchema>>,
+      }),
+    );
   }),
 );
 

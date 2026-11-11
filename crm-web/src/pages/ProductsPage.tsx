@@ -189,7 +189,75 @@ interface Product {
   isHighlighted: boolean;
   variants: Variant[];
   images: Array<{ id: string; url: string; isCover: boolean }>;
-  category: { name: string } | null;
+  categoryId: string | null;
+  category: { id?: string; name: string; isActive?: boolean } | null;
+}
+
+/** Categoria de roupa (Alfaiataria, Moda Festa…). `scope` = em que vitrine aparece. */
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  scope: 'SALE' | 'RENTAL' | 'BOTH';
+  displayOrder: number;
+  isActive: boolean;
+  _count?: { products: number };
+}
+
+const CATEGORY_SCOPE_LABEL: Record<Category['scope'], string> = {
+  SALE: 'Venda',
+  RENTAL: 'Locação',
+  BOTH: 'Venda e locação',
+};
+
+/**
+ * A categoria serve à modalidade da peça? "Venda e locação" serve a qualquer
+ * uma; peça de venda e aluguel precisa de categoria das duas vitrines.
+ */
+const categoryFits = (category: Category, availability: Product['availability']) =>
+  category.scope === 'BOTH' || category.scope === availability;
+
+/** Select de categoria — obrigatório no cadastro; destaca categoria antiga na edição. */
+function CategorySelect({
+  categories,
+  availability,
+  value,
+  onChange,
+  legacyLabel,
+}: {
+  categories: Category[];
+  availability: Product['availability'];
+  value: string;
+  onChange: (id: string) => void;
+  /** Texto de alerta quando a peça está sem categoria ou numa categoria inativa. */
+  legacyLabel?: string | null;
+}) {
+  const options = categories.filter((c) => c.isActive && categoryFits(c, availability));
+  const isLegacy = Boolean(legacyLabel) && !options.some((c) => c.id === value);
+  return (
+    <div className="field">
+      <label>Categoria</label>
+      <select
+        value={isLegacy ? '' : value}
+        onChange={(e) => onChange(e.target.value)}
+        style={isLegacy ? { borderColor: 'var(--danger, #9e3b32)' } : undefined}
+      >
+        <option value="">
+          {isLegacy ? legacyLabel : 'Selecione…'}
+        </option>
+        {options.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      {options.length === 0 ? (
+        <p className="sub">
+          Nenhuma categoria ativa serve a esta disponibilidade. Ajuste em "Categorias".
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 const AVAILABILITY_LABEL: Record<Product['availability'], string> = {
@@ -309,13 +377,23 @@ export function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   /** A coleção abre como lookbook; a lista fica para conferir estoque e preço. */
   const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [managingCategories, setManagingCategories] = useState(false);
+  const categoriesApi = useApi<Category[]>('/admin/categories');
+  const categories = categoriesApi.data ?? [];
+  const activeCategories = categories.filter((c) => c.isActive);
 
   const perPage = 20;
   const { data, error, loading, reload } = useApi<{ data: Product[]; total: number }>(
-    `/admin/products?page=${page}&perPage=${perPage}${filter ? `&availability=${filter}` : ''}`,
+    `/admin/products?page=${page}&perPage=${perPage}${filter ? `&availability=${filter}` : ''}${
+      categoryFilter ? `&categoryId=${categoryFilter}` : ''
+    }`,
   );
 
   if (error) return <ErrorBox message={error} />;
+
+  // O filtro de categoria é aplicado no servidor (vale para todas as páginas).
+  const visible = data?.data ?? [];
 
   const publish = async (product: Product) => {
     await api.patch(`/admin/products/${product.id}`, { status: 'PUBLISHED' });
@@ -349,6 +427,9 @@ export function ProductsPage() {
                 Lista
               </button>
             </div>
+            <button className="ghost" onClick={() => setManagingCategories(true)}>
+              Categorias
+            </button>
             <button onClick={() => setCreating(true)}>Nova peça</button>
           </>
         }
@@ -369,20 +450,41 @@ export function ProductsPage() {
         ))}
       </div>
 
+      {activeCategories.length > 0 ? (
+        <div className="tabs">
+          {[{ id: '', name: 'Todas as categorias' }, ...activeCategories].map((category) => (
+            <button
+              key={category.id || 'all'}
+              className={categoryFilter === category.id ? 'active' : ''}
+              onClick={() => {
+                setCategoryFilter(category.id);
+                setPage(1);
+              }}
+            >
+              {category.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {loading || !data ? (
         <Loading rows={5} />
-      ) : data.data.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div className="card">
           <EmptyState
-            title="Nenhuma peça cadastrada"
-            description="Cadastre a primeira peça para que ela apareça na vitrine do app."
+            title={categoryFilter ? 'Nenhuma peça nesta categoria' : 'Nenhuma peça cadastrada'}
+            description={
+              categoryFilter
+                ? 'Nesta página não há peças desta categoria. Cadastre uma ou troque de página.'
+                : 'Cadastre a primeira peça para que ela apareça na vitrine do app.'
+            }
             action={<button onClick={() => setCreating(true)}>Nova peça</button>}
           />
         </div>
       ) : view === 'grid' ? (
         <>
           <div className="lookbook">
-            {data.data.map((product) => (
+            {visible.map((product) => (
               <LookCard key={product.id} product={product} onEdit={() => setEditing(product)} />
             ))}
           </div>
@@ -407,7 +509,7 @@ export function ProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.data.map((product) => {
+                {visible.map((product) => {
                   const image = cover(product);
                   const stock = product.variants.reduce((sum, v) => sum + v.stock, 0);
                   const rentalStock = product.variants.reduce((sum, v) => sum + v.rentalStock, 0);
@@ -476,6 +578,8 @@ export function ProductsPage() {
           // A aba aberta diz o que a pessoa está montando: cadastrar dentro de
           // "Aluguel" já abre o formulário como peça de aluguel.
           initialAvailability={filter === '' ? 'SALE' : filter}
+          categories={activeCategories}
+          initialCategoryId={categoryFilter}
           onClose={() => setCreating(false)}
           onSaved={() => {
             setCreating(false);
@@ -487,6 +591,7 @@ export function ProductsPage() {
       {editing ? (
         <ProductEditor
           product={editing}
+          categories={categories}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -494,7 +599,192 @@ export function ProductsPage() {
           }}
         />
       ) : null}
+
+      {managingCategories ? (
+        <CategoryManager
+          categories={categories}
+          onChanged={() => void categoriesApi.reload()}
+          onClose={() => setManagingCategories(false)}
+        />
+      ) : null}
     </>
+  );
+}
+
+/**
+ * Categorias de roupa: renomear, ativar/desativar, escolher a vitrine e criar
+ * novas. Categoria inativa some do app e do cadastro de peças, mas as peças
+ * ligadas a ela continuam existindo.
+ */
+function CategoryManager({
+  categories,
+  onChanged,
+  onClose,
+}: {
+  categories: Category[];
+  onChanged: () => void;
+  onClose: () => void;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, { name: string; scope: Category['scope'] }>>(
+    {},
+  );
+  const [newName, setNewName] = useState('');
+  const [newScope, setNewScope] = useState<Category['scope']>('BOTH');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const draftOf = (c: Category) => drafts[c.id] ?? { name: c.name, scope: c.scope };
+
+  const run = async (key: string, action: () => Promise<unknown>) => {
+    setBusy(key);
+    setError(null);
+    try {
+      await action();
+      onChanged();
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveRow = (c: Category) => {
+    const draft = draftOf(c);
+    if (draft.name.trim().length < 2) return setError('O nome precisa ter pelo menos 2 letras.');
+    void run(c.id, async () => {
+      await api.patch(`/admin/categories/${c.id}`, { name: draft.name.trim(), scope: draft.scope });
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[c.id];
+        return next;
+      });
+    });
+  };
+
+  const create = () => {
+    const name = newName.trim();
+    if (name.length < 2) return setError('Informe o nome da nova categoria.');
+    void run('new', async () => {
+      await api.post('/admin/categories', {
+        name,
+        slug: slugify(name),
+        scope: newScope,
+        displayOrder: categories.length,
+      });
+      setNewName('');
+    });
+  };
+
+  return (
+    <Modal
+      title="Categorias"
+      onClose={onClose}
+      footer={<button onClick={onClose}>Fechar</button>}
+    >
+      <p className="sub" style={{ marginTop: 0 }}>
+        As categorias aparecem como filtro na Loja do app. "Venda e locação" vale nas duas vitrines.
+      </p>
+
+      {error ? <ErrorBox message={error} /> : null}
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Vitrine</th>
+              <th className="num">Peças</th>
+              <th>Status</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {categories.map((c) => {
+              const draft = draftOf(c);
+              const dirty = draft.name !== c.name || draft.scope !== c.scope;
+              return (
+                <tr key={c.id} style={c.isActive ? undefined : { opacity: 0.6 }}>
+                  <td>
+                    <input
+                      value={draft.name}
+                      onChange={(e) =>
+                        setDrafts((cur) => ({ ...cur, [c.id]: { ...draft, name: e.target.value } }))
+                      }
+                    />
+                  </td>
+                  <td>
+                    <select
+                      value={draft.scope}
+                      onChange={(e) =>
+                        setDrafts((cur) => ({
+                          ...cur,
+                          [c.id]: { ...draft, scope: e.target.value as Category['scope'] },
+                        }))
+                      }
+                    >
+                      {Object.entries(CATEGORY_SCOPE_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="num">{c._count?.products ?? 0}</td>
+                  <td>
+                    <span className={c.isActive ? 'tag gold' : 'tag'}>
+                      {c.isActive ? 'Ativa' : 'Inativa'}
+                    </span>
+                  </td>
+                  <td className="right actions">
+                    {dirty ? (
+                      <button className="tiny" disabled={busy === c.id} onClick={() => saveRow(c)}>
+                        Salvar
+                      </button>
+                    ) : null}{' '}
+                    <button
+                      className="ghost tiny"
+                      disabled={busy === c.id}
+                      onClick={() =>
+                        void run(c.id, () =>
+                          api.patch(`/admin/categories/${c.id}`, { isActive: !c.isActive }),
+                        )
+                      }
+                    >
+                      {c.isActive ? 'Desativar' : 'Ativar'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style={{ marginTop: 20 }}>Nova categoria</h3>
+      <div className="row">
+        <div className="field" style={{ flex: 2 }}>
+          <label>Nome</label>
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="ex.: Alfaiataria"
+          />
+        </div>
+        <div className="field">
+          <label>Vitrine</label>
+          <select value={newScope} onChange={(e) => setNewScope(e.target.value as Category['scope'])}>
+            {Object.entries(CATEGORY_SCOPE_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <button disabled={busy === 'new'} onClick={create}>
+        {busy === 'new' ? 'Criando…' : 'Criar categoria'}
+      </button>
+    </Modal>
   );
 }
 
@@ -561,10 +851,14 @@ function LookCard({ product, onEdit }: { product: Product; onEdit: () => void })
 
 function ProductForm({
   initialAvailability = 'SALE',
+  categories,
+  initialCategoryId = '',
   onClose,
   onSaved,
 }: {
   initialAvailability?: Product['availability'];
+  categories: Category[];
+  initialCategoryId?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -572,6 +866,7 @@ function ProductForm({
     name: '',
     sku: '',
     availability: initialAvailability,
+    categoryId: initialCategoryId,
     salePrice: '',
     rentalPrice: '',
     promoPrice: '',
@@ -604,6 +899,12 @@ function ProductForm({
     const colors = form.colors.map((c) => ({ ...c, name: c.name.trim() })).filter((c) => c.name);
     const colorNames = new Set(colors.map((c) => c.name.toLowerCase()));
 
+    const category = categories.find((c) => c.id === form.categoryId);
+    if (!category || !categoryFits(category, form.availability)) {
+      setError('Escolha a categoria da peça (ex.: Alfaiataria ou Moda Festa).');
+      setSaving(false);
+      return;
+    }
     if (sizes.length === 0) {
       setError('Selecione pelo menos um tamanho.');
       setSaving(false);
@@ -631,6 +932,7 @@ function ProductForm({
         description: form.description || undefined,
         composition: form.composition || undefined,
         availability: form.availability,
+        categoryId: form.categoryId,
         status: form.publish ? 'PUBLISHED' : 'DRAFT',
         salePriceCents: form.availability !== 'RENTAL' ? toCents(form.salePrice) : undefined,
         rentalPriceCents: form.availability !== 'SALE' ? toCents(form.rentalPrice) : undefined,
@@ -705,6 +1007,13 @@ function ProductForm({
             <option value="BOTH">Venda e aluguel</option>
           </select>
         </div>
+
+        <CategorySelect
+          categories={categories}
+          availability={form.availability}
+          value={form.categoryId}
+          onChange={(id) => set('categoryId', id)}
+        />
 
         <div className="row">
           {form.availability !== 'RENTAL' ? (
@@ -827,14 +1136,25 @@ function ProductForm({
 
 function ProductEditor({
   product,
+  categories,
   onClose,
   onSaved,
 }: {
   product: Product;
+  categories: Category[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [name, setName] = useState(product.name);
+  const [categoryId, setCategoryId] = useState(product.categoryId ?? '');
+  const currentCategory = categories.find((c) => c.id === product.categoryId);
+  /** Peça ainda na categoria antiga (inativa) ou sem categoria: destaca no select. */
+  const legacyCategoryName =
+    product.categoryId && currentCategory && !currentCategory.isActive
+      ? currentCategory.name
+      : product.categoryId && !currentCategory
+        ? (product.category?.name ?? null)
+        : null;
   const [salePrice, setSalePrice] = useState(toReais(product.salePriceCents));
   const [rentalPrice, setRentalPrice] = useState(toReais(product.rentalPriceCents));
   const [promo, setPromo] = useState({
@@ -900,6 +1220,8 @@ function ProductEditor({
       await api.patch(`/admin/products/${product.id}`, {
         name,
         availability,
+        // Só envia a categoria quando a pessoa escolheu outra.
+        ...(categoryId && categoryId !== product.categoryId ? { categoryId } : {}),
         status,
         freeShipping,
         isHighlighted,
@@ -984,6 +1306,20 @@ function ProductEditor({
           </select>
         </div>
       </div>
+
+      <CategorySelect
+        categories={categories}
+        availability={availability}
+        value={categoryId}
+        onChange={setCategoryId}
+        legacyLabel={
+          legacyCategoryName
+            ? `${legacyCategoryName} (antiga) — escolha uma nova`
+            : product.categoryId
+              ? null
+              : 'Sem categoria — escolha uma'
+        }
+      />
 
       <div className="row">
         {availability !== 'RENTAL' ? (
