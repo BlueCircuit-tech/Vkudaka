@@ -321,11 +321,11 @@ async function main() {
         '1. As compras no app são exclusivas para assinantes do Clube VKUDAKA com assinatura ativa.\n\n' +
         '2. Devolução: você tem 7 dias corridos, contados do recebimento, para solicitar a devolução de uma peça. ' +
         'A peça deve estar sem uso, com etiqueta e na embalagem original. O contato é pelo WhatsApp do clube.\n\n' +
-        '3. Abatimento do plano: um percentual do valor da peça vira crédito na sua próxima mensalidade. ' +
-        'Não é acumulativo e só é aplicado quando a compra não usa o saldo da carteira.\n\n' +
+        '3. Créditos e desconto fidelidade: 100% da sua mensalidade vira crédito VKUDAKA na carteira, e você pode usá-lo nas compras. ' +
+        'O desconto fidelidade do seu plano vale em toda compra, inclusive pagando com créditos. Peças em promoção não recebem o desconto.\n\n' +
         '4. Frete: calculado pelos Correios no fechamento do pedido, conforme CEP e peso. ' +
         'Peças e cupons com frete grátis são indicados na loja.\n\n' +
-        '5. Pagamento: Pix, cartão ou saldo da carteira. O pedido é confirmado após a aprovação do pagamento.',
+        '5. Pagamento: Pix, cartão ou créditos da carteira. O pedido é confirmado após a aprovação do pagamento.',
       updatedById: admin.id,
     },
   });
@@ -345,17 +345,20 @@ async function main() {
     },
   });
 
-  // Texto da regra do abatimento, na formulação corrigida pela direção
-  // (14/09/2026). Editável no CRM; o app mostra na Carteira.
+  // Texto dos créditos — regra de 2026-11-11 (100% da mensalidade vira
+  // crédito; desconto fidelidade vale também pagando com créditos). Editável no CRM.
   await prisma.appContent.upsert({
     where: { key: 'rebate_rules' },
     update: {},
     create: {
       key: 'rebate_rules',
-      title: 'Como funciona o abatimento',
+      title: 'Como funcionam os créditos',
       body:
-        'A cada compra de peça na loja, um percentual do valor da peça (10% no Signature, 5% no Essence) vira crédito na sua próxima mensalidade — sem teto e sem prazo para usar.\n\n' +
-        'O abatimento não é acumulativo: é apenas x% da peça, e só é ativado quando você não usa o saldo da carteira naquela compra. Ao pagar com saldo, o pedido não gera crédito.',
+        '100% da sua mensalidade vira crédito VKUDAKA. A cada mensalidade paga, o valor integral entra na sua carteira para você usar em peças da marca.\n\n' +
+        'Os créditos se acumulam mês a mês: planeje, acumule e escolha suas peças quando quiser.\n\n' +
+        'Desconto fidelidade: em toda compra de peça você tem o desconto do seu plano (hoje 10% no Essência e 15% no Premium), inclusive quando paga com os créditos.\n\n' +
+        'Peças em promoção já estão com preço reduzido e não recebem o desconto fidelidade.\n\n' +
+        'Você também pode comprar créditos avulsos na carteira, por Pix ou cartão.',
       updatedById: admin.id,
     },
   });
