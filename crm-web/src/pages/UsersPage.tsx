@@ -740,6 +740,9 @@ function UserDetailModal({
         </p>
       ) : null}
 
+      {/* ── Link de pagamento do plano (Mercado Pago) ── */}
+      <PlanPaymentLinks userId={userId} phone={data.phone} plans={plans.data ?? []} onPaid={reload} />
+
       {/* ── Carteira ── */}
       <SectionTitle>Ajuste manual de carteira</SectionTitle>
       <div className="row" style={{ marginBottom: 26 }}>
@@ -932,5 +935,201 @@ function UserDetailModal({
         )}
       </div>
     </Modal>
+  );
+}
+
+// ── Link de pagamento do plano ──────────────────────────────────────────────
+
+interface PlanCheckoutRow {
+  id: string;
+  planName: string;
+  status: 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELED' | 'REFUNDED';
+  source: 'APP' | 'CRM';
+  amountCents: number;
+  url: string;
+  expiresAt: string;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+const CHECKOUT_STATUS: Record<PlanCheckoutRow['status'], { label: string; tag: string }> = {
+  PENDING: { label: 'Aguardando pagamento', tag: 'tag gold' },
+  PAID: { label: 'Pago · assinatura ativada', tag: 'tag ok' },
+  EXPIRED: { label: 'Vencido', tag: 'tag' },
+  CANCELED: { label: 'Cancelado', tag: 'tag' },
+  REFUNDED: { label: 'Estornado — conferir assinatura', tag: 'tag danger' },
+};
+
+/**
+ * Gera o link do Mercado Pago para o cliente pagar o plano (Pix ou cartão).
+ * Pagou → o servidor ativa a assinatura e lança 100% do valor em créditos,
+ * sem ninguém precisar voltar aqui.
+ */
+function PlanPaymentLinks({
+  userId,
+  phone,
+  plans,
+  onPaid,
+}: {
+  userId: string;
+  phone: string | null;
+  plans: Plan[];
+  onPaid: () => void;
+}) {
+  const links = useApi<{ enabled: boolean; data: PlanCheckoutRow[] }>(
+    `/admin/users/${userId}/plan-checkouts`,
+  );
+  const [planId, setPlanId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<PlanCheckoutRow | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const generate = async () => {
+    setBusy(true);
+    setError(null);
+    setCopied(false);
+    try {
+      const checkout = await api.post<PlanCheckoutRow>(`/admin/users/${userId}/plan-checkout`, { planId });
+      setCreated(checkout);
+      await links.reload();
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copy = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      window.prompt('Copie o link:', url);
+    }
+  };
+
+  const whatsappHref = (checkout: PlanCheckoutRow) => {
+    const digits = (phone ?? '').replace(/\D/g, '');
+    const number = digits.length >= 10 && !digits.startsWith('55') ? `55${digits}` : digits;
+    const text = `Olá! Segue o link para pagar seu Plano ${checkout.planName} do Clube VKUDAKA (${formatBRL(
+      checkout.amountCents,
+    )}), com Pix ou cartão. Assim que o pagamento for aprovado, sua assinatura é ativada e o valor vira crédito na sua carteira: ${checkout.url}`;
+    return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+  };
+
+  const rows = links.data?.data ?? [];
+  const hasNewPaid = rows.some((row) => row.status === 'PAID' && row.paidAt && created?.id === row.id);
+
+  return (
+    <>
+      <SectionTitle>Link de pagamento do plano (Mercado Pago)</SectionTitle>
+      {links.data && !links.data.enabled ? (
+        <p className="notice" style={{ marginBottom: 26 }}>
+          Mercado Pago ainda não está ativo. Configure em Financeiro › Pagamentos para gerar links.
+        </p>
+      ) : (
+        <>
+          <div className="row" style={{ marginBottom: 14 }}>
+            <div className="field">
+              <label>Plano a cobrar</label>
+              <select value={planId} onChange={(e) => setPlanId(e.target.value)}>
+                <option value="">Selecione…</option>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} — {formatBRL(plan.priceCents)}
+                  </option>
+                ))}
+              </select>
+              <span className="hint">
+                Pix ou cartão. Pagou → assinatura ativada e 100% do valor em créditos, automaticamente.
+              </span>
+            </div>
+            <button disabled={!planId || busy} onClick={() => void generate()}>
+              Gerar link
+            </button>
+          </div>
+
+          {error ? <p className="error" style={{ marginBottom: 14 }}>{error}</p> : null}
+
+          {created ? (
+            <div className="card" style={{ marginBottom: 14 }}>
+              <div className="field" style={{ marginBottom: 10 }}>
+                <label>
+                  Link do Plano {created.planName} · {formatBRL(created.amountCents)} · válido até{' '}
+                  {new Date(created.expiresAt).toLocaleString('pt-BR')}
+                </label>
+                <input readOnly value={created.url} onFocus={(e) => e.currentTarget.select()} />
+              </div>
+              <div className="row">
+                <button className="ghost" onClick={() => void copy(created.url)}>
+                  {copied ? 'Copiado!' : 'Copiar link'}
+                </button>
+                {phone ? (
+                  <a className="btn ghost" style={{ textDecoration: 'none' }} href={whatsappHref(created)} target="_blank" rel="noreferrer">
+                    Enviar por WhatsApp
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {rows.length > 0 ? (
+            <div className="card flush" style={{ marginBottom: 26 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Gerado em</th>
+                    <th>Plano</th>
+                    <th>Valor</th>
+                    <th>Origem</th>
+                    <th>Situação</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.id}>
+                      <td>{new Date(row.createdAt).toLocaleString('pt-BR')}</td>
+                      <td>{row.planName}</td>
+                      <td>{formatBRL(row.amountCents)}</td>
+                      <td>{row.source === 'CRM' ? 'CRM' : 'App'}</td>
+                      <td>
+                        <span className={CHECKOUT_STATUS[row.status].tag}>
+                          {CHECKOUT_STATUS[row.status].label}
+                        </span>
+                        {row.paidAt ? <div className="sub">pago em {formatDate(row.paidAt)}</div> : null}
+                      </td>
+                      <td>
+                        {row.status === 'PENDING' ? (
+                          <button className="quiet" onClick={() => void copy(row.url)}>
+                            Copiar
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 26 }} />
+          )}
+          <button
+            className="quiet"
+            style={{ marginTop: -18, marginBottom: 26 }}
+            onClick={() => {
+              void links.reload();
+              onPaid();
+            }}
+          >
+            Atualizar situação
+          </button>
+          {hasNewPaid ? (
+            <p className="notice" style={{ marginBottom: 26 }}>Pagamento confirmado · assinatura ativada.</p>
+          ) : null}
+        </>
+      )}
+    </>
   );
 }

@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { buildManifest, mapStatus, verifyMercadoPagoSignature } from './mercadopago.js';
+import { buildManifest, mapMethod, mapStatus, verifyMercadoPagoSignature } from './mercadopago.js';
 
 const SECRET = 'segredo-do-painel';
 
@@ -34,5 +34,20 @@ describe('Mercado Pago — status', () => {
     expect(mapStatus('charged_back')).toBe('CHARGEBACK');
     expect(mapStatus('pending')).toBeNull();
     expect(mapStatus('in_process')).toBeNull();
+  });
+});
+
+describe('mapMethod (Checkout Pro)', () => {
+  it('reconhece Pix pelo meio ou pelo tipo', () => {
+    expect(mapMethod('bank_transfer', 'pix')).toBe('PIX');
+    expect(mapMethod(undefined, 'pix')).toBe('PIX');
+  });
+  it('separa crédito, débito e saldo Mercado Pago', () => {
+    expect(mapMethod('credit_card', 'visa')).toBe('CREDIT_CARD');
+    expect(mapMethod('debit_card', 'debvisa')).toBe('DEBIT_CARD');
+    expect(mapMethod('account_money', 'account_money')).toBe('ACCOUNT_MONEY');
+  });
+  it('meio desconhecido vira MANUAL, sem quebrar o webhook', () => {
+    expect(mapMethod('crypto', 'x')).toBe('MANUAL');
   });
 });

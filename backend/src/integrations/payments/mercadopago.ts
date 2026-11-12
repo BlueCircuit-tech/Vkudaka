@@ -3,6 +3,7 @@ import { AppError } from '../../lib/errors.js';
 import type {
   ChargeRequest,
   ChargeResult,
+  CheckoutLinkRequest,
   PaymentProvider,
   WebhookContext,
   WebhookEvent,
@@ -38,6 +39,9 @@ interface MpPayment {
   status: string;
   status_detail?: string;
   date_approved?: string | null;
+  external_reference?: string | null;
+  transaction_amount?: number;
+  payment_type_id?: string;
   date_of_expiration?: string | null;
   payment_method_id?: string;
   card?: { last_four_digits?: string };
@@ -157,6 +161,22 @@ const firstString = (value: unknown): string | undefined => {
   if (typeof value === 'number') return String(value);
   return undefined;
 };
+
+/** Tipo de pagamento do Mercado Pago → meio registrado no clube. */
+export function mapMethod(paymentTypeId?: string, paymentMethodId?: string): WebhookEvent['method'] {
+  if (paymentMethodId === 'pix' || paymentTypeId === 'bank_transfer') return 'PIX';
+  switch (paymentTypeId) {
+    case 'credit_card':
+    case 'prepaid_card':
+      return 'CREDIT_CARD';
+    case 'debit_card':
+      return 'DEBIT_CARD';
+    case 'account_money':
+      return 'ACCOUNT_MONEY';
+    default:
+      return 'MANUAL';
+  }
+}
 
 export function createMercadoPagoProvider(config: MercadoPagoConfig): PaymentProvider {
   const payer = (customer: ChargeRequest['customer']) => {
@@ -315,8 +335,69 @@ export function createMercadoPagoProvider(config: MercadoPagoConfig): PaymentPro
         externalId: String(payment.id),
         status,
         paidAt: payment.date_approved ? new Date(payment.date_approved) : undefined,
+        externalReference: payment.external_reference ?? undefined,
+        amountCents:
+          typeof payment.transaction_amount === 'number'
+            ? Math.round(payment.transaction_amount * 100)
+            : undefined,
+        method: mapMethod(payment.payment_type_id, payment.payment_method_id),
         raw: payment,
       };
+    },
+
+    /**
+     * Checkout Pro: `POST /checkout/preferences` devolve o `init_point`, a
+     * página do Mercado Pago com Pix e cartão (parcelado). Boleto e lotérica
+     * ficam de fora: compensam em dias, e quem paga o plano quer entrar já.
+     */
+    async createCheckoutLink(request: CheckoutLinkRequest) {
+      const name = splitName(request.customer.name);
+      const preference = await mpFetch<{ id: string; init_point?: string }>(
+        config.accessToken,
+        '/checkout/preferences',
+        {
+          method: 'POST',
+          idempotencyKey: randomUUID(),
+          body: {
+            items: [
+              {
+                id: request.reference,
+                title: request.title,
+                description: request.description,
+                quantity: 1,
+                currency_id: 'BRL',
+                unit_price: Number((request.amountCents / 100).toFixed(2)),
+              },
+            ],
+            payer: {
+              name: name.first,
+              surname: name.last,
+              email: request.customer.email,
+              identification: identification(request.customer.document),
+            },
+            external_reference: request.reference,
+            notification_url: config.notificationUrl,
+            back_urls: {
+              success: request.returnUrl,
+              pending: request.returnUrl,
+              failure: request.returnUrl,
+            },
+            auto_return: 'approved',
+            expires: true,
+            expiration_date_from: new Date().toISOString(),
+            expiration_date_to: request.expiresAt.toISOString(),
+            date_of_expiration: request.expiresAt.toISOString(),
+            payment_methods: {
+              excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }],
+            },
+            statement_descriptor: 'VKUDAKA',
+          },
+        },
+      );
+      if (!preference.init_point) {
+        throw new MercadoPagoApiError(502, 'link de pagamento não retornado');
+      }
+      return { provider: 'mercadopago', preferenceId: preference.id, url: preference.init_point };
     },
   };
 }

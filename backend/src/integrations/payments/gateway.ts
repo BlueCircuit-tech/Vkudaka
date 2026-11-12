@@ -52,7 +52,40 @@ export interface WebhookEvent {
   externalId: string;
   status: 'PAID' | 'FAILED' | 'REFUNDED' | 'CHARGEBACK';
   paidAt?: Date;
+  /**
+   * Referência nossa gravada na cobrança. É por ela que um pagamento feito num
+   * link (Checkout Pro) é casado: o id do pagamento só nasce quando o cliente
+   * paga, então não há como guardá-lo antes.
+   */
+  externalReference?: string;
+  /** Valor efetivamente pago, quando o provedor informa. */
+  amountCents?: number;
+  /** Meio usado pelo cliente, quando o provedor informa (link aceita vários). */
+  method?: 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'ACCOUNT_MONEY' | 'MANUAL';
   raw: unknown;
+}
+
+/**
+ * Link de pagamento hospedado pelo provedor (Checkout Pro no Mercado Pago):
+ * o cliente escolhe Pix ou cartão na página do próprio gateway — o app não
+ * precisa de SDK de cartão. A confirmação chega pelo mesmo webhook.
+ */
+export interface CheckoutLinkRequest {
+  /** Volta no webhook como `externalReference` (ex.: `plan:<uuid>`). */
+  reference: string;
+  title: string;
+  description: string;
+  amountCents: number;
+  expiresAt: Date;
+  customer: { name: string; email: string; document: string };
+  /** Página para onde o cliente volta depois de pagar. */
+  returnUrl: string;
+}
+
+export interface CheckoutLinkResult {
+  provider: string;
+  preferenceId: string;
+  url: string;
 }
 
 /** Tudo o que um webhook traz: corpo bruto, cabeçalhos e query string. */
@@ -72,6 +105,7 @@ export interface PaymentProvider {
    * (ex.: pagamento ainda pendente, ou tópico que não é pagamento).
    */
   parseWebhook(ctx: WebhookContext): Promise<WebhookEvent | null>;
+  createCheckoutLink(request: CheckoutLinkRequest): Promise<CheckoutLinkResult>;
 }
 
 /** Referência opaca da conta recebedora — o suficiente para auditoria. */
@@ -113,8 +147,36 @@ const mockProvider: PaymentProvider = {
   },
 
   async parseWebhook({ rawBody }) {
-    const body = JSON.parse(rawBody) as { externalId: string; status: WebhookEvent['status'] };
-    return { externalId: body.externalId, status: body.status, paidAt: new Date(), raw: body };
+    const body = JSON.parse(rawBody) as {
+      externalId: string;
+      status: WebhookEvent['status'];
+      externalReference?: string;
+      amountCents?: number;
+      method?: WebhookEvent['method'];
+    };
+    return {
+      externalId: body.externalId,
+      status: body.status,
+      paidAt: new Date(),
+      externalReference: body.externalReference,
+      amountCents: body.amountCents,
+      method: body.method,
+      raw: body,
+    };
+  },
+
+  /**
+   * Em desenvolvimento não há página de pagamento: simule a aprovação com
+   * POST /webhooks/payments {"externalId":"qualquer","status":"PAID",
+   * "externalReference":"<reference>"}.
+   */
+  async createCheckoutLink(request) {
+    const preferenceId = `mock_pref_${randomUUID()}`;
+    return {
+      provider: 'mock',
+      preferenceId,
+      url: `${env.API_PUBLIC_URL}/payments/mock-checkout?ref=${encodeURIComponent(request.reference)}`,
+    };
   },
 };
 
@@ -165,6 +227,9 @@ const pendingIntegration = (name: string): PaymentProvider => {
     async parseWebhook() {
       throw missing('parseWebhook');
     },
+    async createCheckoutLink() {
+      throw missing('createCheckoutLink');
+    },
   };
 };
 
@@ -186,6 +251,9 @@ const unconfigured = (problem?: string): PaymentProvider => {
       throw error();
     },
     async parseWebhook() {
+      throw error();
+    },
+    async createCheckoutLink() {
       throw error();
     },
   };

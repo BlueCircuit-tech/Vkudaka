@@ -11,7 +11,13 @@ import { clubReport, dailySeries, dashboard, salesVsRentals } from './reports.se
 import * as wallet from '../../domain/wallet/wallet.service.js';
 import { dispatch } from '../notifications/notifications.service.js';
 import {
+  createPlanCheckout,
+  isPlanCheckoutEnabled,
+  toPublicCheckout,
+} from '../plans/plan-checkout.service.js';
+import {
   getRebateSettings,
+  grantPlanPeriod,
   quarterlyRentalStatus,
 } from '../subscriptions/subscriptions.service.js';
 
@@ -667,52 +673,13 @@ adminRouter.post(
     };
 
     const { result, creditedCents } = await prisma.$transaction(async (tx) => {
-      const plan = await tx.plan.findUniqueOrThrow({ where: { id: body.planId } });
-
-      const current = await tx.subscription.findFirst({
-        where: { userId, status: { in: ['ACTIVE', 'TRIALING'] } },
-        orderBy: { currentPeriodEnd: 'desc' },
+      const { subscription } = await grantPlanPeriod(tx, {
+        userId,
+        planId: body.planId,
+        months: body.months,
+        rebatePercent: negotiated,
       });
-
-      // Renovação parte do fim do período vigente; assinatura nova, de hoje.
-      const start =
-        current && current.currentPeriodEnd > new Date() ? current.currentPeriodEnd : new Date();
-      const end = dayjs(start).add(body.months, 'month').toDate();
-
-      if (current) {
-        // Troca de plano encerra o contrato anterior e abre outro com o preço novo.
-        if (current.planId === body.planId) {
-          const renewed = await tx.subscription.update({
-            where: { id: current.id },
-            data: {
-              currentPeriodEnd: end,
-              status: 'ACTIVE',
-              cancelAtPeriodEnd: false,
-              ...(negotiated !== undefined ? { rebatePercent: negotiated } : {}),
-            },
-            include: { plan: true },
-          });
-          return { result: renewed, creditedCents: await creditSubscription(tx, renewed) };
-        }
-        await tx.subscription.update({
-          where: { id: current.id },
-          data: { status: 'CANCELED', canceledAt: new Date() },
-        });
-      }
-
-      const created = await tx.subscription.create({
-        data: {
-          userId,
-          planId: plan.id,
-          status: 'ACTIVE',
-          currentPeriodStart: start,
-          currentPeriodEnd: end,
-          priceCents: plan.priceCents,
-          rebatePercent: negotiated ?? null,
-        },
-        include: { plan: true },
-      });
-      return { result: created, creditedCents: await creditSubscription(tx, created) };
+      return { result: subscription, creditedCents: await creditSubscription(tx, subscription) };
     });
 
     await prisma.auditLog.create({
@@ -734,6 +701,52 @@ adminRouter.post(
     });
 
     res.status(201).json({ ...result, creditedCents });
+  }),
+);
+
+/**
+ * Link de pagamento do plano (Mercado Pago) gerado pela equipe — para mandar
+ * por WhatsApp. Quando o cliente paga, o webhook ativa a assinatura e lança
+ * os créditos sozinho; ninguém precisa voltar aqui para "dar baixa".
+ */
+adminRouter.post(
+  '/users/:id/plan-checkout',
+  validate(z.object({ planId: z.string().uuid() })),
+  asyncHandler(async (req, res) => {
+    const checkout = await createPlanCheckout({
+      userId: param(req, 'id'),
+      planId: (req.body as { planId: string }).planId,
+      source: 'CRM',
+      createdById: req.auth!.userId,
+    });
+    await prisma.auditLog.create({
+      data: {
+        actorId: req.auth!.userId,
+        action: 'plan_checkout.create',
+        entity: 'PlanCheckout',
+        entityId: checkout.id,
+        after: { userId: checkout.userId, planId: checkout.planId, amountCents: checkout.amountCents },
+        ip: req.ip,
+      },
+    });
+    res.status(201).json(toPublicCheckout(checkout));
+  }),
+);
+
+/** Últimos links de pagamento de plano da pessoa, com a situação de cada um. */
+adminRouter.get(
+  '/users/:id/plan-checkouts',
+  asyncHandler(async (req, res) => {
+    const checkouts = await prisma.planCheckout.findMany({
+      where: { userId: param(req, 'id') },
+      include: { plan: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+    res.json({
+      enabled: await isPlanCheckoutEnabled(),
+      data: checkouts.map(toPublicCheckout),
+    });
   }),
 );
 

@@ -1,6 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import { api } from '../api/client';
 import { colors, fonts, formatBRL, radius, spacing, typography } from '../theme/theme';
 import { Body, Button, Caption, Label, Loading, Screen } from '../components/ui';
@@ -15,9 +17,14 @@ import { Body, Button, Caption, Label, Loading, Screen } from '../components/ui'
  * Tudo o que aparece aqui — preço, preço "de", selos, benefícios e a tabela
  * comparativa — vem do CRM (GET /plans). Nada de valor fixo no app.
  *
- * Assinatura é paga no site: o botão é "Assinar no site VKUDAKA", o mesmo texto
- * da versão aprovada pela Apple. Não trocar por "Assinar agora" sem revisar a
- * diretriz 3.1 da App Store.
+ * Pagamento (2026-11-12): com o Mercado Pago configurado no CRM
+ * (`checkoutEnabled`), cada plano tem o próprio botão e o pagamento é feito
+ * num link do Mercado Pago (Pix ou cartão) — pagou, virou assinante e o valor
+ * entra como crédito na carteira. Sem o gateway configurado, volta o botão
+ * antigo "Assinar no site VKUDAKA".
+ *
+ * Atenção App Store (diretriz 3.1.1): a decisão de usar o Mercado Pago também
+ * no iPhone foi do Rafael em 2026-11-12, ciente do risco de recusa na revisão.
  */
 
 interface PublicPlan {
@@ -37,6 +44,7 @@ interface PlansResponse {
   plans: PublicPlan[];
   comparison: Array<{ label: string; values: string[] }>;
   storeUrl: string;
+  checkoutEnabled?: boolean;
 }
 
 interface MyPlan {
@@ -73,6 +81,8 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
   const [catalog, setCatalog] = useState<PlansResponse | null>(null);
   const [me, setMe] = useState<MyPlan | null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [paying, setPaying] = useState<string | null>(null);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   useFocusEffect(
     useCallback(() => {
@@ -89,6 +99,39 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
   const storeUrl = me?.storeUrl ?? catalog.storeUrl;
   const openStore = () => void Linking.openURL(storeUrl);
   const isSubscriber = Boolean(me?.hasPlan);
+  const checkoutEnabled = Boolean(catalog.checkoutEnabled);
+
+  /** Gera o link do Mercado Pago e leva para a tela que espera a confirmação. */
+  const pay = async (plan: PublicPlan) => {
+    if (!checkoutEnabled) return openStore();
+    setPaying(plan.id);
+    try {
+      const checkout = await api.post<{ id: string; url: string; planName: string }>(
+        '/plans/checkout',
+        { planId: plan.id },
+      );
+      navigation.navigate('PlanCheckout', {
+        checkoutId: checkout.id,
+        url: checkout.url,
+        planName: checkout.planName,
+      });
+    } catch (error) {
+      Alert.alert('Não foi possível abrir o pagamento', (error as Error).message);
+    } finally {
+      setPaying(null);
+    }
+  };
+
+  /** Botão de cada card: assinar, renovar o plano atual ou fazer upgrade. */
+  const actionFor = (plan: PublicPlan) => {
+    if (!checkoutEnabled) return undefined;
+    if (!isSubscriber) return { title: `Assinar Plano ${plan.name}`, primary: true };
+    if (me?.planId === plan.id) return { title: 'Renovar mais um período', primary: false };
+    if (plan.priceCents > (catalog.plans.find((p) => p.id === me?.planId)?.priceCents ?? 0)) {
+      return { title: `Fazer upgrade para ${plan.name}`, primary: true };
+    }
+    return undefined;
+  };
 
   return (
     <Screen scroll={false}>
@@ -144,9 +187,26 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
         ) : null}
 
         {/* Cards dos planos */}
-        {catalog.plans.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} isCurrent={me?.planId === plan.id} />
-        ))}
+        {catalog.plans.map((plan) => {
+          const action = actionFor(plan);
+          return (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              isCurrent={me?.planId === plan.id}
+              action={
+                action
+                  ? {
+                      ...action,
+                      loading: paying === plan.id,
+                      disabled: paying !== null,
+                      onPress: () => void pay(plan),
+                    }
+                  : undefined
+              }
+            />
+          );
+        })}
 
         {/* Tabela comparativa colapsável */}
         {catalog.comparison.length > 0 ? (
@@ -192,7 +252,12 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
 
       {/* CTA fixo no rodapé */}
       <View style={styles.footer}>
-        {!isSubscriber ? (
+        {!isSubscriber && checkoutEnabled ? (
+          <Caption>
+            Escolha seu plano acima e pague com Pix ou cartão pelo Mercado Pago. 100% do valor
+            vira crédito na sua carteira.
+          </Caption>
+        ) : !isSubscriber ? (
           <Button title="Assinar no site VKUDAKA" onPress={openStore} />
         ) : me?.upgrade ? (
           <>
@@ -203,7 +268,12 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
                 ? ` · ${me.upgrade.rebatePercent}% de desconto fidelidade`
                 : ''}
             </Caption>
-            <Button title={`Fazer upgrade para ${me.upgrade.name}`} onPress={openStore} />
+            <Button
+              title={`Fazer upgrade para ${me.upgrade.name}`}
+              loading={paying === me.upgrade.id}
+              disabled={paying !== null}
+              onPress={() => (me.upgrade ? void pay(me.upgrade) : undefined)}
+            />
           </>
         ) : (
           <Caption>Você está no plano mais completo do clube.</Caption>
@@ -213,7 +283,23 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
   );
 }
 
-function PlanCard({ plan, isCurrent }: { plan: PublicPlan; isCurrent: boolean }) {
+interface CardAction {
+  title: string;
+  primary: boolean;
+  loading: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}
+
+function PlanCard({
+  plan,
+  isCurrent,
+  action,
+}: {
+  plan: PublicPlan;
+  isCurrent: boolean;
+  action?: CardAction;
+}) {
   // Plano com selo de destaque ("Mais popular") vem em fundo escuro.
   const featured = Boolean(plan.highlightLabel);
   const ink = featured ? colors.cream : colors.ink;
@@ -261,6 +347,16 @@ function PlanCard({ plan, isCurrent }: { plan: PublicPlan; isCurrent: boolean })
           </View>
         ))}
       </View>
+
+      {action ? (
+        <Button
+          title={action.title}
+          variant={action.primary ? 'primary' : 'ghost'}
+          loading={action.loading}
+          disabled={action.disabled}
+          onPress={action.onPress}
+        />
+      ) : null}
     </View>
   );
 }

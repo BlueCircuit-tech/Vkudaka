@@ -26,9 +26,9 @@ datasource db {
 
 enum UserRole {
   MEMBER // cliente do app
-  GATE   // portaria: só valida ingresso e lê lista de presença
-  STAFF  // operação: catálogo, eventos, pedidos, push
-  ADMIN  // tudo, inclusive planos, descontos e financeiro
+  GATE // portaria: só valida ingresso e lê lista de presença
+  STAFF // operação: catálogo, eventos, pedidos, push
+  ADMIN // tudo, inclusive planos, descontos e financeiro
 }
 
 enum UserStatus {
@@ -55,7 +55,7 @@ enum BillingInterval {
 /// RN-02: como o percentual do plano é aplicado.
 enum RebateMode {
   CREDIT_NEXT_INVOICE // padrão: vira crédito da próxima mensalidade
-  IMMEDIATE_DISCOUNT  // desconta no ato da compra
+  IMMEDIATE_DISCOUNT // desconta no ato da compra
 }
 
 enum SubscriptionStatus {
@@ -83,12 +83,12 @@ enum CreditStatus {
 }
 
 enum WalletTxType {
-  TOPUP             // recarga via gateway
-  PURCHASE          // débito em compra/aluguel
-  REFUND            // estorno de pedido
+  TOPUP // recarga via gateway
+  PURCHASE // débito em compra/aluguel
+  REFUND // estorno de pedido
   ADJUSTMENT_CREDIT // ajuste manual do CRM (+)
-  ADJUSTMENT_DEBIT  // ajuste manual do CRM (−)
-  SUBSCRIPTION      // mensalidade paga: 100% vira crédito VKUDAKA (2026-11-11)
+  ADJUSTMENT_DEBIT // ajuste manual do CRM (−)
+  SUBSCRIPTION // mensalidade paga: 100% vira crédito VKUDAKA (2026-11-11)
 }
 
 /// Define onde a peça aparece no app. Aluguel fica em segundo plano na vitrine.
@@ -131,6 +131,23 @@ enum PaymentMethod {
   APPLE_IAP
   GOOGLE_IAP
   MANUAL
+  DEBIT_CARD // Checkout Pro do Mercado Pago (2026-11-12)
+  ACCOUNT_MONEY // saldo da conta Mercado Pago (Checkout Pro)
+}
+
+/// Link de pagamento de plano (Checkout Pro do Mercado Pago) — 2026-11-12.
+enum PlanCheckoutStatus {
+  PENDING // link gerado, aguardando pagamento
+  PAID // pago: assinatura ativada e créditos lançados
+  EXPIRED // venceu sem pagamento
+  CANCELED // substituído por outro link ou cancelado no CRM
+  REFUNDED // estornado/contestado depois de pago
+}
+
+/// De onde saiu o link: o próprio cliente pelo app ou a equipe pelo CRM.
+enum PlanCheckoutSource {
+  APP
+  CRM
 }
 
 enum PaymentStatus {
@@ -165,8 +182,8 @@ enum EventStatus {
 
 enum AttendeeKind {
   SUBSCRIBER_RSVP // assinante: não paga entrada
-  PAID_TICKET     // avulso: comprou ingresso
-  GUEST           // convidado pela casa
+  PAID_TICKET // avulso: comprou ingresso
+  GUEST // convidado pela casa
 }
 
 enum TicketStatus {
@@ -178,8 +195,8 @@ enum TicketStatus {
 
 enum PostStatus {
   PUBLISHED
-  HIDDEN   // moderação
-  DELETED  // soft delete pelo autor
+  HIDDEN // moderação
+  DELETED // soft delete pelo autor
 }
 
 /// Denúncia de conteúdo da comunidade (exigência da política de UGC do Google Play).
@@ -191,18 +208,18 @@ enum ReportTargetType {
 
 enum ReportReason {
   SPAM
-  HARASSMENT   // assédio, ofensa
+  HARASSMENT // assédio, ofensa
   NUDITY
   VIOLENCE
-  HATE         // discurso de ódio
-  SCAM         // golpe, venda enganosa
+  HATE // discurso de ódio
+  SCAM // golpe, venda enganosa
   OTHER
 }
 
 enum ReportStatus {
   OPEN
-  RESOLVED   // conteúdo ocultado ou conta bloqueada
-  DISMISSED  // analisada e mantida
+  RESOLVED // conteúdo ocultado ou conta bloqueada
+  DISMISSED // analisada e mantida
 }
 
 enum MediaKind {
@@ -269,27 +286,28 @@ model User {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  addresses     Address[]
-  measurements  Measurement?
-  wallet        Wallet?
-  subscriptions Subscription[]
-  orders        Order[]
-  payments      Payment[]
-  credits       SubscriptionCredit[]
-  rsvps         EventAttendee[]
-  tickets       Ticket[]
-  posts         Post[]
-  comments      Comment[]
-  likes         PostLike[]
-  devices       Device[]
-  notifications NotificationDelivery[]
-  refreshTokens RefreshToken[]
-  auditLogs     AuditLog[]             @relation("AuditActor")
-  ticketScans   Ticket[]               @relation("TicketScanner")
-  reportsMade     ContentReport[] @relation("ReportReporter")
-  reportsResolved ContentReport[] @relation("ReportResolver")
-  blocksMade      UserBlock[]     @relation("BlockBlocker")
-  blocksReceived  UserBlock[]     @relation("BlockBlocked")
+  addresses       Address[]
+  measurements    Measurement?
+  wallet          Wallet?
+  subscriptions   Subscription[]
+  orders          Order[]
+  payments        Payment[]
+  credits         SubscriptionCredit[]
+  rsvps           EventAttendee[]
+  tickets         Ticket[]
+  posts           Post[]
+  comments        Comment[]
+  likes           PostLike[]
+  devices         Device[]
+  notifications   NotificationDelivery[]
+  refreshTokens   RefreshToken[]
+  auditLogs       AuditLog[]             @relation("AuditActor")
+  ticketScans     Ticket[]               @relation("TicketScanner")
+  reportsMade     ContentReport[]        @relation("ReportReporter")
+  reportsResolved ContentReport[]        @relation("ReportResolver")
+  blocksMade      UserBlock[]            @relation("BlockBlocker")
+  blocksReceived  UserBlock[]            @relation("BlockBlocked")
+  planCheckouts   PlanCheckout[]         @relation("PlanCheckoutUser")
 
   @@index([status, role])
   @@index([createdAt])
@@ -362,19 +380,19 @@ model Measurement {
 
 /// Planos cadastráveis no CRM (3.2). O app nunca tem percentual hardcoded.
 model Plan {
-  id            String          @id @default(uuid()) @db.Uuid
-  name          String          @unique @db.VarChar(60) // "Essence", "Signature"
-  slug          String          @unique @db.VarChar(60)
-  description   String?         @db.VarChar(500)
-  priceCents    Int // ex.: 9900 = R$ 99,00
+  id                  String          @id @default(uuid()) @db.Uuid
+  name                String          @unique @db.VarChar(60) // "Essence", "Signature"
+  slug                String          @unique @db.VarChar(60)
+  description         String?         @db.VarChar(500)
+  priceCents          Int // ex.: 9900 = R$ 99,00
   /// Preço "de" exibido riscado (ex.: 11900 em "de R$ 119 por R$ 99"). Nulo = sem riscado.
   compareAtPriceCents Int?
   /// Selo da condição de preço (ex.: "Preço Black Friday").
-  promoLabel    String?         @db.VarChar(40)
+  promoLabel          String?         @db.VarChar(40)
   /// Selo de destaque (ex.: "Mais popular"). Plano com selo aparece em destaque no app.
-  highlightLabel String?        @db.VarChar(40)
-  interval      BillingInterval @default(MONTHLY)
-  intervalCount Int             @default(1)
+  highlightLabel      String?         @db.VarChar(40)
+  interval            BillingInterval @default(MONTHLY)
+  intervalCount       Int             @default(1)
 
   /// RN-02 — percentual de abatimento do nível (10 = 10%).
   rebatePercent Decimal    @default(0) @db.Decimal(5, 2)
@@ -390,6 +408,7 @@ model Plan {
   benefits      PlanBenefit[]
   subscriptions Subscription[]
   campaigns     NotificationCampaign[]
+  checkouts     PlanCheckout[]
 
   @@index([isActive, displayOrder])
   @@map("plans")
@@ -570,12 +589,12 @@ model Category {
 }
 
 model Product {
-  id          String  @id @default(uuid()) @db.Uuid
-  sku         String  @unique @db.VarChar(40)
-  name        String  @db.VarChar(160)
-  slug        String  @unique @db.VarChar(180)
-  description String? @db.Text
-  categoryId  String? @db.Uuid
+  id           String              @id @default(uuid()) @db.Uuid
+  sku          String              @unique @db.VarChar(40)
+  name         String              @db.VarChar(160)
+  slug         String              @unique @db.VarChar(180)
+  description  String?             @db.Text
+  categoryId   String?             @db.Uuid
   /// Define claramente se a peça é para Venda, Aluguel ou Ambos (3.3).
   availability ProductAvailability @default(SALE)
   status       ProductStatus       @default(DRAFT)
@@ -587,7 +606,7 @@ model Product {
   promoPriceCents    Int?
   promoStartsAt      DateTime?
   promoEndsAt        DateTime?
-  rentalDays         Int  @default(4)
+  rentalDays         Int       @default(4)
   /// Caução do aluguel, se houver.
   rentalDepositCents Int?
 
@@ -716,11 +735,11 @@ model Order {
 }
 
 model OrderItem {
-  id           String  @id @default(uuid()) @db.Uuid
-  orderId      String  @db.Uuid
-  productId    String? @db.Uuid
-  variantId    String? @db.Uuid
-  ticketTypeId String? @db.Uuid
+  id             String    @id @default(uuid()) @db.Uuid
+  orderId        String    @db.Uuid
+  productId      String?   @db.Uuid
+  variantId      String?   @db.Uuid
+  ticketTypeId   String?   @db.Uuid
   /// Snapshot: o pedido não muda se o catálogo mudar depois.
   nameSnapshot   String    @db.VarChar(180)
   skuSnapshot    String?   @db.VarChar(50)
@@ -748,30 +767,31 @@ model Payment {
   /// Recarga de carteira não tem pedido nem fatura: o dono fica aqui.
   userId    String? @db.Uuid
 
-  method      PaymentMethod
-  status      PaymentStatus @default(PENDING)
-  amountCents Int
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  amountCents   Int
   /// Identificadores do provedor — idempotência do webhook.
-  provider     String  @db.VarChar(40)
-  externalId   String? @db.VarChar(120)
-  pixQrCode    String? @db.Text
-  pixCopyPaste String? @db.Text
-  cardBrand    String? @db.VarChar(20)
-  cardLast4    String? @db.Char(4)
-  installments Int     @default(1)
+  provider      String        @db.VarChar(40)
+  externalId    String?       @db.VarChar(120)
+  pixQrCode     String?       @db.Text
+  pixCopyPaste  String?       @db.Text
+  cardBrand     String?       @db.VarChar(20)
+  cardLast4     String?       @db.Char(4)
+  installments  Int           @default(1)
   /// RN-10 — conta recebedora usada na liquidação (referência, sem dado sensível).
-  recipientRef  String?   @db.VarChar(80)
-  failureReason String?   @db.VarChar(240)
+  recipientRef  String?       @db.VarChar(80)
+  failureReason String?       @db.VarChar(240)
   paidAt        DateTime?
   refundedAt    DateTime?
   rawPayload    Json?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  order     Order?               @relation(fields: [orderId], references: [id])
-  invoice   SubscriptionInvoice? @relation(fields: [invoiceId], references: [id])
-  user      User?                @relation(fields: [userId], references: [id])
-  walletTxs WalletTransaction[]
+  order        Order?               @relation(fields: [orderId], references: [id])
+  invoice      SubscriptionInvoice? @relation(fields: [invoiceId], references: [id])
+  user         User?                @relation(fields: [userId], references: [id])
+  walletTxs    WalletTransaction[]
+  planCheckout PlanCheckout?
 
   @@unique([provider, externalId])
   @@index([userId, createdAt])
@@ -780,21 +800,21 @@ model Payment {
 }
 
 model Coupon {
-  id          String     @id @default(uuid()) @db.Uuid
-  code        String     @unique @db.VarChar(30)
-  description String?    @db.VarChar(160)
-  type        CouponType
+  id               String     @id @default(uuid()) @db.Uuid
+  code             String     @unique @db.VarChar(30)
+  description      String?    @db.VarChar(160)
+  type             CouponType
   /// PERCENT: 10 = 10%. FIXED: centavos. FREE_SHIPPING: ignorado.
-  value            Decimal   @default(0) @db.Decimal(10, 2)
-  minSubtotalCents Int       @default(0)
-  minItems         Int       @default(0)
+  value            Decimal    @default(0) @db.Decimal(10, 2)
+  minSubtotalCents Int        @default(0)
+  minItems         Int        @default(0)
   maxRedemptions   Int?
-  redemptions      Int       @default(0)
-  perUserLimit     Int       @default(1)
+  redemptions      Int        @default(0)
+  perUserLimit     Int        @default(1)
   startsAt         DateTime?
   endsAt           DateTime?
-  isActive         Boolean   @default(true)
-  createdAt        DateTime  @default(now())
+  isActive         Boolean    @default(true)
+  createdAt        DateTime   @default(now())
 
   orders Order[]
 
@@ -823,15 +843,15 @@ model ShippingRule {
 }
 
 model Shipment {
-  id            String          @id @default(uuid()) @db.Uuid
-  orderId       String          @unique @db.Uuid
-  addressId     String          @db.Uuid
-  service       ShippingService
-  quotedCents   Int
-  chargedCents  Int
-  estimatedDays Int?
-  trackingCode  String?         @db.VarChar(40)
-  labelUrl      String?
+  id                    String          @id @default(uuid()) @db.Uuid
+  orderId               String          @unique @db.Uuid
+  addressId             String          @db.Uuid
+  service               ShippingService
+  quotedCents           Int
+  chargedCents          Int
+  estimatedDays         Int?
+  trackingCode          String?         @db.VarChar(40)
+  labelUrl              String?
   /// Declaração de conteúdo emitida automaticamente (3.6).
   contentDeclarationUrl String?
   declarationIssuedAt   DateTime?
@@ -853,24 +873,24 @@ model Shipment {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Event {
-  id          String  @id @default(uuid()) @db.Uuid
-  title       String  @db.VarChar(160)
-  slug        String  @unique @db.VarChar(180)
-  description String? @db.Text
-  coverUrl    String?
+  id           String  @id @default(uuid()) @db.Uuid
+  title        String  @db.VarChar(160)
+  slug         String  @unique @db.VarChar(180)
+  description  String? @db.Text
+  coverUrl     String?
   /// Arte de fundo do ingresso (asset fornecido pela equipe).
   ticketArtUrl String?
 
-  venueName    String?     @db.VarChar(160)
-  venueAddress String?     @db.VarChar(240)
-  startsAt     DateTime
-  endsAt       DateTime?
-  capacity     Int?
-  status       EventStatus @default(DRAFT)
+  venueName          String?     @db.VarChar(160)
+  venueAddress       String?     @db.VarChar(240)
+  startsAt           DateTime
+  endsAt             DateTime?
+  capacity           Int?
+  status             EventStatus @default(DRAFT)
   /// Assinantes não pagam entrada (2.4). Falso só em evento fechado/pago para todos.
-  subscribersFree Boolean @default(true)
+  subscribersFree    Boolean     @default(true)
   /// Habilita o bloco isolado de venda avulsa para não assinantes.
-  sellsPublicTickets Boolean @default(true)
+  sellsPublicTickets Boolean     @default(true)
 
   rsvpDeadline DateTime?
   publishedAt  DateTime?
@@ -906,15 +926,15 @@ model EventTicketType {
 
 /// Presença confirmada — origem da lista da portaria (3.4).
 model EventAttendee {
-  id      String       @id @default(uuid()) @db.Uuid
-  eventId String       @db.Uuid
-  userId  String?      @db.Uuid
-  kind    AttendeeKind
+  id            String       @id @default(uuid()) @db.Uuid
+  eventId       String       @db.Uuid
+  userId        String?      @db.Uuid
+  kind          AttendeeKind
   /// Não assinante avulso pode comprar sem conta: nome/doc ficam aqui.
-  guestName     String? @db.VarChar(160)
-  guestEmail    String? @db.VarChar(160)
-  guestPhone    String? @db.VarChar(20)
-  guestDocument String? @db.VarChar(20)
+  guestName     String?      @db.VarChar(160)
+  guestEmail    String?      @db.VarChar(160)
+  guestPhone    String?      @db.VarChar(20)
+  guestDocument String?      @db.VarChar(20)
 
   confirmedAt DateTime  @default(now())
   canceledAt  DateTime?
@@ -936,9 +956,9 @@ model Ticket {
   ticketTypeId String? @db.Uuid
   orderId      String? @db.Uuid
   /// Código legível impresso no ingresso (10 caracteres, sem ambiguidade).
-  code      String @unique @db.VarChar(14)
+  code         String  @unique @db.VarChar(14)
   /// Payload assinado (HMAC) lido pelo QR Code.
-  qrPayload String @unique @db.Text
+  qrPayload    String  @unique @db.Text
 
   kind        AttendeeKind
   status      TicketStatus @default(VALID)
@@ -963,17 +983,17 @@ model Ticket {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Post {
-  id      String     @id @default(uuid()) @db.Uuid
-  userId  String     @db.Uuid
-  content String     @db.VarChar(2000)
-  status  PostStatus @default(PUBLISHED)
+  id           String     @id @default(uuid()) @db.Uuid
+  userId       String     @db.Uuid
+  content      String     @db.VarChar(2000)
+  status       PostStatus @default(PUBLISHED)
   /// Post oficial da casa aparece destacado no feed.
-  isOfficial   Boolean   @default(false)
-  likeCount    Int       @default(0)
-  commentCount Int       @default(0)
+  isOfficial   Boolean    @default(false)
+  likeCount    Int        @default(0)
+  commentCount Int        @default(0)
   editedAt     DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   deletedAt    DateTime?
 
   user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1004,10 +1024,10 @@ model PostMedia {
 }
 
 model Comment {
-  id       String  @id @default(uuid()) @db.Uuid
-  postId   String  @db.Uuid
-  userId   String  @db.Uuid
-  parentId String? @db.Uuid
+  id       String     @id @default(uuid()) @db.Uuid
+  postId   String     @db.Uuid
+  userId   String     @db.Uuid
+  parentId String?    @db.Uuid
   /// Hiperlinks externos são permitidos e extraídos para `links`.
   content  String     @db.VarChar(1000)
   links    String[]   @default([])
@@ -1042,19 +1062,19 @@ model PostLike {
 /// Uma por (denunciante, alvo): denunciar de novo não duplica, só atualiza o motivo.
 /// A fila é tratada no CRM (Clube › Denúncias).
 model ContentReport {
-  id         String           @id @default(uuid()) @db.Uuid
-  reporterId String           @db.Uuid
-  targetType ReportTargetType
-  targetId   String           @db.Uuid
-  reason     ReportReason
-  details    String?          @db.VarChar(500)
-  status     ReportStatus     @default(OPEN)
+  id           String           @id @default(uuid()) @db.Uuid
+  reporterId   String           @db.Uuid
+  targetType   ReportTargetType
+  targetId     String           @db.Uuid
+  reason       ReportReason
+  details      String?          @db.VarChar(500)
+  status       ReportStatus     @default(OPEN)
   /// "HIDDEN" | "USER_BLOCKED" | "DISMISSED" — o que a moderação fez.
-  resolution   String?   @db.VarChar(20)
-  resolvedById String?   @db.Uuid
+  resolution   String?          @db.VarChar(20)
+  resolvedById String?          @db.Uuid
   resolvedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   reporter   User  @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
   resolvedBy User? @relation("ReportResolver", fields: [resolvedById], references: [id])
@@ -1114,8 +1134,8 @@ model ModelProfile {
   invitedAt   DateTime?
   completedAt DateTime?
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   application ModelApplication?
 
@@ -1161,24 +1181,24 @@ model Device {
 }
 
 model NotificationCampaign {
-  id      String              @id @default(uuid()) @db.Uuid
-  title   String              @db.VarChar(120)
-  body    String              @db.VarChar(400)
-  trigger NotificationTrigger @default(MANUAL)
-  status  NotificationStatus  @default(SCHEDULED)
+  id               String              @id @default(uuid()) @db.Uuid
+  title            String              @db.VarChar(120)
+  body             String              @db.VarChar(400)
+  trigger          NotificationTrigger @default(MANUAL)
+  status           NotificationStatus  @default(SCHEDULED)
   /// Deep link no app: vkudaka://produto/<id>, vkudaka://evento/<id>...
-  deepLink String? @db.VarChar(200)
-  imageUrl String?
+  deepLink         String?             @db.VarChar(200)
+  imageUrl         String?
   /// Segmentação: plano específico, apenas assinantes ativos, etc.
-  targetPlanId     String?  @db.Uuid
-  targetActiveOnly Boolean  @default(true)
+  targetPlanId     String?             @db.Uuid
+  targetActiveOnly Boolean             @default(true)
   scheduledFor     DateTime?
   sentAt           DateTime?
-  totalTargets     Int      @default(0)
-  totalSent        Int      @default(0)
-  totalFailed      Int      @default(0)
-  createdById      String?  @db.Uuid
-  createdAt        DateTime @default(now())
+  totalTargets     Int                 @default(0)
+  totalSent        Int                 @default(0)
+  totalFailed      Int                 @default(0)
+  createdById      String?             @db.Uuid
+  createdAt        DateTime            @default(now())
 
   targetPlan Plan?                  @relation(fields: [targetPlanId], references: [id])
   deliveries NotificationDelivery[]
@@ -1207,6 +1227,44 @@ model NotificationDelivery {
 // ─────────────────────────────────────────────────────────────────────────────
 // CONTEÚDO EDITÁVEL E AUDITORIA
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Cobrança de plano por link do Mercado Pago (Checkout Pro).
+//
+// O cliente (pelo app) ou a equipe (pelo CRM) gera o link; o Mercado Pago
+// avisa o pagamento pelo webhook com `external_reference` = `plan:<id>`, e
+// aí a assinatura é ativada e 100% do valor entra na carteira — tudo numa
+// transação, uma única vez (o status PENDING → PAID é a trava).
+model PlanCheckout {
+  id             String             @id @default(uuid()) @db.Uuid
+  userId         String             @db.Uuid
+  planId         String             @db.Uuid
+  status         PlanCheckoutStatus @default(PENDING)
+  source         PlanCheckoutSource @default(APP)
+  /// Valor cobrado (preço do plano no ato de gerar o link).
+  amountCents    Int
+  provider       String             @db.VarChar(40)
+  /// Id da preferência no Mercado Pago.
+  preferenceId   String?            @db.VarChar(120)
+  checkoutUrl    String             @db.Text
+  expiresAt      DateTime
+  paidAt         DateTime?
+  /// Pagamento registrado quando o gateway confirma.
+  paymentId      String?            @unique @db.Uuid
+  /// Assinatura ativada/renovada por este pagamento.
+  subscriptionId String?            @db.Uuid
+  /// Quem gerou pelo CRM (nulo quando foi o próprio cliente no app).
+  createdById    String?            @db.Uuid
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  user    User     @relation("PlanCheckoutUser", fields: [userId], references: [id])
+  plan    Plan     @relation(fields: [planId], references: [id])
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+  @@map("plan_checkouts")
+}
 
 /// Textos administrados pela diretoria sem deploy — ex.: regras de compra do popup (2.3).
 model AppContent {

@@ -24,6 +24,7 @@ import { WalletScreen } from '../screens/WalletScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SubscriptionRequiredScreen } from '../screens/SubscriptionRequiredScreen';
 import { PlansScreen } from '../screens/PlansScreen';
+import { PlanCheckoutScreen } from '../screens/PlanCheckoutScreen';
 
 export type RootStackParamList = {
   Tabs: undefined;
@@ -36,6 +37,8 @@ export type RootStackParamList = {
   /** Aluguel (2.3) — seção própria, alcançada pela loja. */
   Rental: undefined;
   Plans: undefined;
+  /** Espera do pagamento do plano no Mercado Pago (link aberto fora do app). */
+  PlanCheckout: { checkoutId: string; url: string; planName: string };
   SubscriptionRequired: { storeUrl?: string } | undefined;
 };
 
@@ -137,6 +140,11 @@ export function RootNavigator() {
       <Stack.Screen name="Rental" component={RentalScreen} options={{ title: 'Aluguel' }} />
       {/* Título em caixa alta: a Carla não tem minúsculas acentuadas. */}
       <Stack.Screen name="Plans" component={PlansScreen} options={{ title: 'PLANOS' }} />
+      <Stack.Screen
+        name="PlanCheckout"
+        component={PlanCheckoutScreen}
+        options={{ title: 'PAGAMENTO' }}
+      />
       <Stack.Screen
         name="ProductDetail"
         component={ProductDetailScreen}

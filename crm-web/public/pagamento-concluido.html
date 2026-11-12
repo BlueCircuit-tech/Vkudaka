@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pagamento — Clube VKUDAKA</title>
+<meta name="robots" content="noindex" />
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #FAF7F3; color: #22201d;
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    width: 100%; max-width: 440px; margin: 16px; padding: 36px 24px; text-align: center;
+    background: #fff; border: 1px solid #e4ddd3; border-radius: 16px;
+  }
+  img { width: 140px; margin-bottom: 20px; }
+  .icon { font-size: 40px; color: #b8954f; line-height: 1; }
+  h1 { font-size: 24px; margin: 12px 0 8px; }
+  p { color: #5c5449; margin: 0 0 22px; }
+  a.button {
+    display: block; padding: 14px; border-radius: 999px; text-decoration: none;
+    background: #1d2433; color: #e6c98a; font-weight: 600; letter-spacing: .02em;
+  }
+  .muted { color: #8a8178; font-size: 13px; margin: 18px 0 0; }
+</style>
+</head>
+<body>
+<main class="card">
+  <img src="/logo-preto.png" alt="VKUDAKA" />
+  <div class="icon" id="icon">✦</div>
+  <h1 id="title">Pagamento recebido</h1>
+  <p id="text">
+    Assim que o Mercado Pago confirmar, sua assinatura é ativada e o valor vira crédito na sua
+    carteira. Pode voltar para o app.
+  </p>
+  <a class="button" href="vkudaka://">Voltar ao app Clube VKUDAKA</a>
+  <p class="muted">Se o app não abrir, abra o Clube VKUDAKA pelo seu celular.</p>
+</main>
+<script>
+  // O Mercado Pago devolve `status` na URL: approved, pending (Pix aguardando) ou rejected.
+  var status = new URLSearchParams(location.search).get('status');
+  var title = document.getElementById('title');
+  var text = document.getElementById('text');
+  if (status === 'approved') {
+    title.textContent = 'Pagamento aprovado!';
+    text.textContent =
+      'Sua assinatura está sendo ativada e o valor já vai aparecer como crédito na sua carteira.';
+  } else if (status === 'pending' || status === 'in_process') {
+    title.textContent = 'Pagamento em análise';
+    text.textContent =
+      'Assim que o Mercado Pago confirmar, sua assinatura é ativada automaticamente. Você recebe um aviso no app.';
+  } else if (status === 'rejected' || status === 'null') {
+    document.getElementById('icon').textContent = '!';
+    title.textContent = 'Pagamento não concluído';
+    text.textContent =
+      'O pagamento não foi aprovado. Volte ao app e tente de novo, com Pix ou outro cartão.';
+  }
+</script>
+</body>
+</html>

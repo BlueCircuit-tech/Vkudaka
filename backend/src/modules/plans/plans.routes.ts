@@ -7,6 +7,15 @@ import { effectiveRebatePercent } from '../subscriptions/subscriptions.service.j
 import { authenticate } from '../../middleware/auth.js';
 import { buildComparison } from '../../domain/plans/comparison.js';
 import { getBalance } from '../../domain/wallet/wallet.service.js';
+import { z } from 'zod';
+import { validate } from '../../middleware/validate.js';
+import { param } from '../../lib/http.js';
+import { notFound } from '../../lib/errors.js';
+import {
+  createPlanCheckout,
+  isPlanCheckoutEnabled,
+  toPublicCheckout,
+} from './plan-checkout.service.js';
 
 /**
  * Planos e benefícios (3.2) — leitura para o app.
@@ -55,11 +64,13 @@ const toPublicPlan = (plan: PlanWithBenefits) => ({
 plansRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
-    const plans = await activePlans();
+    const [plans, checkoutEnabled] = await Promise.all([activePlans(), isPlanCheckoutEnabled()]);
     res.json({
       plans: plans.map(toPublicPlan),
       comparison: buildComparison(plans),
       storeUrl: env.EXTERNAL_STORE_URL,
+      /** true = o app paga o plano pelo link do Mercado Pago; false = botão do site. */
+      checkoutEnabled,
     });
   }),
 );
@@ -116,6 +127,50 @@ plansRouter.get(
       walletBalanceCents,
       upgrade: upgrade ? toPublicPlan(upgrade) : null,
       storeUrl: env.EXTERNAL_STORE_URL,
+    });
+  }),
+);
+
+/**
+ * Gera (ou reaproveita) o link de pagamento do plano no Mercado Pago.
+ * Pagou → o webhook ativa a assinatura e lança os créditos na carteira.
+ */
+plansRouter.post(
+  '/checkout',
+  authenticate,
+  validate(z.object({ planId: z.string().uuid() })),
+  asyncHandler(async (req, res) => {
+    const checkout = await createPlanCheckout({
+      userId: req.auth!.userId,
+      planId: (req.body as { planId: string }).planId,
+      source: 'APP',
+    });
+    res.status(201).json(toPublicCheckout(checkout));
+  }),
+);
+
+/** Situação do link — a tela de espera do app consulta até virar PAID. */
+plansRouter.get(
+  '/checkout/:id',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const checkout = await prisma.planCheckout.findFirst({
+      where: { id: param(req, 'id'), userId: req.auth!.userId },
+      include: { plan: { select: { name: true } } },
+    });
+    if (!checkout) throw notFound('Pagamento do plano');
+
+    const subscription = checkout.subscriptionId
+      ? await prisma.subscription.findUnique({
+          where: { id: checkout.subscriptionId },
+          select: { currentPeriodEnd: true },
+        })
+      : null;
+
+    res.json({
+      ...toPublicCheckout(checkout),
+      currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
+      walletBalanceCents: await getBalance(prisma, req.auth!.userId),
     });
   }),
 );

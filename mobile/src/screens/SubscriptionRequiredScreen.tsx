@@ -8,8 +8,8 @@ import { PlansView } from './PlansScreen';
  * RN-01 — destino de quem não tem assinatura ativa.
  *
  * Mostra os planos e benefícios (vindos do CRM) com o aviso de área exclusiva.
- * O app não vende assinatura por dentro: o botão leva ao site da VKUDAKA, com a
- * URL vinda do servidor (`storeUrl`), nunca fixa no app.
+ * Com o Mercado Pago configurado, cada plano tem o botão de assinar (link de
+ * pagamento Pix/cartão); sem ele, o botão leva ao site (`storeUrl` do servidor).
  */
 export function SubscriptionRequiredScreen() {
   return (
@@ -18,8 +18,9 @@ export function SubscriptionRequiredScreen() {
         <View style={styles.notice}>
           <Text style={[typography.display, styles.title]}>Área exclusiva de assinantes</Text>
           <Body>
-            A loja, o aluguel, a carteira e a comunidade são do clube. Escolha seu plano e assine
-            no site da VKUDAKA — leva menos de dois minutos.
+            A loja, o aluguel e a comunidade são do clube. Escolha seu plano e pague com Pix ou
+            cartão — assim que o pagamento for aprovado, o acesso é liberado e o valor vira
+            crédito na sua carteira.
           </Body>
           <Caption>Você continua podendo comprar ingressos avulsos para os eventos abertos.</Caption>
         </View>

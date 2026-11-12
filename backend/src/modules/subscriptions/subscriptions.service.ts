@@ -78,6 +78,75 @@ export const periodEnd = (start: Date, interval: BillingInterval, count = 1): Da
     .add(MONTHS_BY_INTERVAL[interval] * count, 'month')
     .toDate();
 
+/** Meses cobertos por um período do plano (Mensal = 1, Trimestral = 3…). */
+export const planPeriodMonths = (plan: { interval: BillingInterval; intervalCount: number }) =>
+  MONTHS_BY_INTERVAL[plan.interval] * Math.max(1, plan.intervalCount);
+
+/**
+ * Ativa, renova ou troca o plano de uma pessoa por `months` meses.
+ *
+ * É a mesma regra para a concessão manual do CRM e para o pagamento confirmado
+ * pelo Mercado Pago: a renovação parte do fim do período vigente (quem paga
+ * antes de vencer não perde dias); trocar de plano encerra o contrato anterior
+ * e abre outro com o preço do plano novo (RN-06 — preço travado no contrato).
+ *
+ * `rebatePercent`: omitido = não mexe; null = volta ao do plano; número = negociado.
+ */
+export async function grantPlanPeriod(
+  tx: Tx,
+  input: {
+    userId: string;
+    planId: string;
+    months: number;
+    rebatePercent?: Prisma.Decimal | null;
+  },
+) {
+  const plan = await tx.plan.findUniqueOrThrow({ where: { id: input.planId } });
+
+  const current = await tx.subscription.findFirst({
+    where: { userId: input.userId, status: { in: ['ACTIVE', 'TRIALING'] } },
+    orderBy: { currentPeriodEnd: 'desc' },
+  });
+
+  const start =
+    current && current.currentPeriodEnd > new Date() ? current.currentPeriodEnd : new Date();
+  const end = dayjs(start).add(input.months, 'month').toDate();
+
+  if (current) {
+    if (current.planId === input.planId) {
+      const renewed = await tx.subscription.update({
+        where: { id: current.id },
+        data: {
+          currentPeriodEnd: end,
+          status: 'ACTIVE',
+          cancelAtPeriodEnd: false,
+          ...(input.rebatePercent !== undefined ? { rebatePercent: input.rebatePercent } : {}),
+        },
+        include: { plan: true },
+      });
+      return { subscription: renewed, periodStart: start };
+    }
+    await tx.subscription.update({
+      where: { id: current.id },
+      data: { status: 'CANCELED', canceledAt: new Date() },
+    });
+  }
+
+  const created = await tx.subscription.create({
+    data: {
+      userId: input.userId,
+      planId: plan.id,
+      status: 'ACTIVE',
+      currentPeriodStart: start,
+      currentPeriodEnd: end,
+      priceCents: plan.priceCents,
+      rebatePercent: input.rebatePercent ?? null,
+    },
+    include: { plan: true },
+  });
+  return { subscription: created, periodStart: start };
+}
+
 /**
  * RN-05 — gera a fatura do período e aplica os créditos de abatimento
  * acumulados (FIFO, sem teto, sem expiração).

@@ -8,6 +8,11 @@ import { env } from '../../config/env.js';
 import { creditTopUp } from '../wallet/wallet.routes.js';
 import { settleOrder } from './orders.service.js';
 import * as credits from '../../domain/credits/credits.service.js';
+import {
+  PLAN_REFERENCE_PREFIX,
+  flagPlanCheckoutReversal,
+  settlePlanCheckout,
+} from '../plans/plan-checkout.service.js';
 
 /**
  * Webhooks do gateway.
@@ -50,8 +55,19 @@ webhooksRouter.post(
 
     const payment = await prisma.payment.findFirst({
       where: { provider: paymentProvider.name, externalId: event.externalId },
+      include: { planCheckout: { select: { id: true } } },
     });
     if (!payment) {
+      // Link de plano (Checkout Pro): o pagamento só existe depois que o
+      // cliente paga — o casamento é pela referência que gravamos no link.
+      if (event.externalReference?.startsWith(PLAN_REFERENCE_PREFIX)) {
+        const checkoutId = event.externalReference.slice(PLAN_REFERENCE_PREFIX.length);
+        const outcome = /^[0-9a-f-]{36}$/i.test(checkoutId)
+          ? await settlePlanCheckout(checkoutId, event, paymentProvider.name)
+          : 'ignored';
+        res.status(200).json({ received: true, plan: outcome });
+        return;
+      }
       res.status(200).json({ received: true, matched: false });
       return;
     }
@@ -71,6 +87,15 @@ webhooksRouter.post(
         rawPayload: event.raw as never,
       },
     });
+
+    if (payment.planCheckout) {
+      // Pagamento de plano já ativado: só estorno/contestação interessa aqui.
+      if (event.status === 'REFUNDED' || event.status === 'CHARGEBACK') {
+        await flagPlanCheckoutReversal(payment.id, event.status);
+      }
+      res.status(200).json({ received: true });
+      return;
+    }
 
     if (event.status === 'PAID') {
       if (payment.orderId) {

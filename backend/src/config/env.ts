@@ -26,6 +26,8 @@ const schema = z.object({
   EXTERNAL_STORE_URL: z.string().url(),
   CLUB_WHATSAPP_URL: z.string().url(),
   CLUB_INSTAGRAM_URL: z.string().url(),
+  /** Site público (Vercel): página de retorno depois do pagamento do plano. */
+  PUBLIC_WEB_URL: z.string().url().default('https://vkudaka.vercel.app'),
 
   DATABASE_URL: z.string().min(1),
 
