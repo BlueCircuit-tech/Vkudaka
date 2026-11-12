@@ -29,6 +29,11 @@ function getTransporter(): Transporter {
       port: env.SMTP_PORT,
       secure: env.SMTP_PORT === 465,
       auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+      // Falha rápido: com a porta bloqueada (ex.: plano gratuito do Render),
+      // o padrão do nodemailer deixava o cliente esperando 2 minutos.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     });
   }
   return transporter;
