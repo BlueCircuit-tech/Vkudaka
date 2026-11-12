@@ -10,6 +10,7 @@ import { Loading } from '../components/ui';
 
 import { SignInScreen } from '../screens/SignInScreen';
 import { SignUpScreen } from '../screens/SignUpScreen';
+import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { ClubScreen } from '../screens/ClubScreen';
 import { ShopScreen } from '../screens/ShopScreen';
 import { LooksScreen } from '../screens/LooksScreen';
@@ -119,6 +120,7 @@ export function RootNavigator() {
       <AuthStack.Navigator screenOptions={{ headerShown: false }}>
         <AuthStack.Screen name="SignIn" component={SignInScreen} />
         <AuthStack.Screen name="SignUp" component={SignUpScreen} />
+        <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       </AuthStack.Navigator>
     );
   }

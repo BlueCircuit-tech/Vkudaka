@@ -29,6 +29,15 @@ const schema = z.object({
   /** Site público (Vercel): página de retorno depois do pagamento do plano. */
   PUBLIC_WEB_URL: z.string().url().default('https://vkudaka.vercel.app'),
 
+  // E-mail transacional ("Esqueci a senha"). Gmail: smtp.gmail.com:465 com
+  // uma senha de app do Google (exige verificação em 2 etapas na conta).
+  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_PORT: z.coerce.number().int().positive().default(465),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  /** Remetente exibido. Padrão: "Clube VKUDAKA <SMTP_USER>". */
+  MAIL_FROM: z.string().optional(),
+
   DATABASE_URL: z.string().min(1),
 
   JWT_SECRET: z.string().min(32, 'JWT_SECRET precisa de ao menos 32 caracteres'),

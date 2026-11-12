@@ -308,10 +308,28 @@ model User {
   blocksMade      UserBlock[]            @relation("BlockBlocker")
   blocksReceived  UserBlock[]            @relation("BlockBlocked")
   planCheckouts   PlanCheckout[]         @relation("PlanCheckoutUser")
+  PasswordReset   PasswordReset[]
 
   @@index([status, role])
   @@index([createdAt])
   @@map("users")
+}
+
+// "Esqueci a senha" (2026-11-12): código de 6 dígitos enviado por e-mail.
+// Só o HMAC do código é guardado; vale 15 minutos e aceita poucas tentativas.
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  codeHash  String    @db.Char(64)
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_resets")
 }
 
 model RefreshToken {

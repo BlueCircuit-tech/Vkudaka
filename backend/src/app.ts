@@ -60,6 +60,9 @@ export function createApp(): Express {
   // Força bruta em login e formulário público de modelos.
   const strictLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20 });
   app.use('/auth/signin', strictLimiter);
+  // "Esqueci a senha": poucos e-mails por IP e poucas tentativas de código.
+  app.use('/auth/password/forgot', rateLimit({ windowMs: 15 * 60 * 1000, limit: 5 }));
+  app.use('/auth/password/reset', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20 }));
   app.use('/models/apply', rateLimit({ windowMs: 60 * 60 * 1000, limit: 10 }));
   // Consulta pública do convite: o token tem 192 bits, adivinhar é inviável,
   // mas não há motivo para deixar alguém tentar sem limite.

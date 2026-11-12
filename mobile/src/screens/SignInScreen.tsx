@@ -60,6 +60,17 @@ export function SignInScreen() {
 
           <Button title="Entrar" onPress={() => void submit()} loading={loading} />
           <Pressable
+            onPress={() =>
+              (navigation as never as { navigate: (s: string, p?: unknown) => void }).navigate(
+                'ForgotPassword',
+                { identifier: identifier.trim() },
+              )
+            }
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Esqueci minha senha</Text>
+          </Pressable>
+          <Pressable
             onPress={() => (navigation as never as { navigate: (s: string) => void }).navigate('SignUp')}
             style={styles.secondary}
           >
