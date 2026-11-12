@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { lookupCep } from '../api/cep';
 import {
   brDateToISO,
   isValidCPF,
@@ -63,6 +64,41 @@ export function SignUpScreen() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cepStatus, setCepStatus] = useState<'idle' | 'loading' | 'found' | 'notFound'>('idle');
+  const lastCep = useRef('');
+
+  // CEP completo → busca rua, bairro, cidade e UF (ViaCEP/BrasilAPI). Número e
+  // complemento continuam com a pessoa; o resto pode ser corrigido à mão.
+  const cepDigits = onlyDigits(form.zipCode);
+  useEffect(() => {
+    if (cepDigits.length !== 8) {
+      lastCep.current = '';
+      setCepStatus('idle');
+      return;
+    }
+    if (cepDigits === lastCep.current) return;
+    lastCep.current = cepDigits;
+    let alive = true;
+    setCepStatus('loading');
+    void lookupCep(cepDigits).then((address) => {
+      if (!alive) return;
+      if (!address) {
+        setCepStatus('notFound');
+        return;
+      }
+      setForm((current) => ({
+        ...current,
+        street: address.street || current.street,
+        district: address.district || current.district,
+        city: address.city || current.city,
+        state: address.state || current.state,
+      }));
+      setCepStatus('found');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [cepDigits]);
 
   const set = (key: keyof typeof form, format?: (value: string) => string) => (value: string) =>
     setForm((current) => ({
@@ -198,6 +234,13 @@ export function SignUpScreen() {
             onChange={set('zipCode', maskCEP)}
             keyboardType="number-pad"
           />
+          {cepStatus === 'loading' ? <Caption>Buscando endereço pelo CEP…</Caption> : null}
+          {cepStatus === 'found' ? (
+            <Caption>Endereço preenchido pelo CEP. Confira e informe o número.</Caption>
+          ) : null}
+          {cepStatus === 'notFound' ? (
+            <Caption>Não encontramos esse CEP. Preencha o endereço abaixo.</Caption>
+          ) : null}
           <Field placeholder="Rua *" value={form.street} onChange={set('street')} />
           <View style={styles.row}>
             <View style={{ flex: 1 }}>

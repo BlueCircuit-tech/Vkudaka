@@ -345,6 +345,96 @@ adminCatalogRouter.patch(
   }),
 );
 
+// ── "Mudar Categoria APP" — as 2 fotos do modal da Loja ────────────────────────
+
+adminCatalogRouter.get(
+  '/category-picker',
+  asyncHandler(async (_req, res) => {
+    const [chosen, categories] = await Promise.all([
+      prisma.category.findMany({ where: { pickerOrder: { not: null } }, orderBy: { pickerOrder: 'asc' } }),
+      prisma.category.findMany({
+        where: { isActive: true },
+        orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, name: true, scope: true, imageUrl: true },
+      }),
+    ]);
+    res.json({
+      slots: [1, 2].map((order) => {
+        const category = chosen.find((c) => c.pickerOrder === order);
+        return {
+          order,
+          categoryId: category?.id ?? null,
+          imageUrl: category?.imageUrl ?? null,
+          label: category?.pickerLabel ?? null,
+        };
+      }),
+      categories,
+    });
+  }),
+);
+
+adminCatalogRouter.put(
+  '/category-picker',
+  validate(
+    z.object({
+      slots: z
+        .array(
+          z.object({
+            order: z.union([z.literal(1), z.literal(2)]),
+            categoryId: z.string().uuid().nullable(),
+            imageUrl: z.string().url().nullable().optional(),
+            label: z.string().trim().max(40).nullable().optional(),
+          }),
+        )
+        .max(2),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const { slots } = req.body as {
+      slots: Array<{ order: 1 | 2; categoryId: string | null; imageUrl?: string | null; label?: string | null }>;
+    };
+    const filled = slots.filter((slot) => slot.categoryId);
+    if (new Set(filled.map((slot) => slot.categoryId)).size !== filled.length) {
+      throw badRequest('PICKER_DUPLICATE', 'Escolha categorias diferentes para as duas fotos.');
+    }
+    if (new Set(slots.map((slot) => slot.order)).size !== slots.length) {
+      throw badRequest('PICKER_DUPLICATE_ORDER', 'Cada posição só pode aparecer uma vez.');
+    }
+    for (const slot of filled) {
+      if (!slot.imageUrl) throw badRequest('PICKER_IMAGE_MISSING', `Envie a foto ${slot.order}.`);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.category.updateMany({
+        where: { pickerOrder: { not: null } },
+        data: { pickerOrder: null, pickerLabel: null },
+      });
+      for (const slot of filled) {
+        await tx.category.update({
+          where: { id: slot.categoryId! },
+          data: {
+            pickerOrder: slot.order,
+            imageUrl: slot.imageUrl,
+            pickerLabel: slot.label?.trim() || null,
+          },
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          actorId: req.auth!.userId,
+          action: 'category_picker.update',
+          entity: 'Category',
+          entityId: 'picker',
+          after: { slots: filled },
+          ip: req.ip,
+        },
+      });
+    });
+
+    res.status(204).end();
+  }),
+);
+
 // ── 3.4 Eventos ──────────────────────────────────────────────────────────────
 
 const eventSchema = z.object({

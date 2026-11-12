@@ -4,6 +4,7 @@ import { session } from './api/client';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { UsersPage } from './pages/UsersPage';
+import { CategoryPickerPage } from './pages/CategoryPickerPage';
 import { ModerationPage } from './pages/ModerationPage';
 import { PlansPage } from './pages/PlansPage';
 import { ProductsPage } from './pages/ProductsPage';
@@ -48,6 +49,7 @@ const NAV: Array<{ group: string; items: Array<{ to: string; label: string; end?
     group: 'Operação',
     items: [
       { to: '/produtos', label: 'Coleção' },
+      { to: '/categoria-app', label: 'Mudar Categoria APP' },
       { to: '/eventos', label: 'Eventos e portaria' },
       { to: '/modelos', label: 'Modelos' },
       { to: '/logistica', label: 'Logística e fretes' },
@@ -129,6 +131,7 @@ export function App() {
         <Route path="/pedidos" element={<Protected><OrdersPage /></Protected>} />
         <Route path="/planos" element={<Protected><PlansPage /></Protected>} />
         <Route path="/usuarios" element={<Protected><UsersPage /></Protected>} />
+        <Route path="/categoria-app" element={<Protected><CategoryPickerPage /></Protected>} />
         <Route path="/moderacao" element={<Protected><ModerationPage /></Protected>} />
         <Route path="/produtos" element={<Protected><ProductsPage /></Protected>} />
         <Route path="/eventos" element={<Protected><EventsPage /></Protected>} />

@@ -177,6 +177,31 @@ catalogRouter.get(
 );
 
 /**
+ * As 2 fotos do modal que abre ao tocar em Loja ("Mudar Categoria APP" no
+ * CRM). Tocar numa foto filtra a vitrine por aquela categoria. Lista vazia =
+ * o app não mostra o modal.
+ */
+catalogRouter.get(
+  '/category-picker',
+  authenticate,
+  asyncHandler(async (_req, res) => {
+    const categories = await prisma.category.findMany({
+      where: { isActive: true, pickerOrder: { not: null }, imageUrl: { not: null } },
+      orderBy: { pickerOrder: 'asc' },
+      take: 2,
+    });
+    res.json(
+      categories.map((category) => ({
+        id: category.id,
+        label: category.pickerLabel || category.name,
+        scope: category.scope,
+        imageUrl: category.imageUrl,
+      })),
+    );
+  }),
+);
+
+/**
  * Detalhe da peça já com a prévia do abatimento (3.2): o botão "Comprar" mostra
  * o benefício calculado com o percentual que veio do CRM, sem regra no cliente.
  */

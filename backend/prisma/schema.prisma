@@ -599,6 +599,11 @@ model Category {
   displayOrder Int                 @default(0)
   isActive     Boolean             @default(true)
   imageUrl     String?
+  /// "Mudar Categoria APP" (CRM, 2026-11-12): posição da foto no modal que abre
+  /// ao tocar em Loja (1 ou 2). Nulo = não aparece no modal.
+  pickerOrder  Int?
+  /// Texto escrito sobre a foto. Nulo = nome da categoria.
+  pickerLabel  String?             @db.VarChar(40)
 
   products Product[]
 

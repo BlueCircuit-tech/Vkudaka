@@ -1,12 +1,13 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { api } from '../api/client';
 import { SubscriptionLocked, isSubscriptionRequired } from '../components/SubscriptionLocked';
 import { colors, radius, spacing, typography } from '../theme/theme';
 import { Caption, Loading, Screen } from '../components/ui';
 import { ProductGrid, type ProductSummary, type QuarterlyRental } from '../components/ProductGrid';
 import { QuarterlyNotice } from '../components/QuarterlyNotice';
+import { CategoryPickerModal, type PickerCategory } from '../components/CategoryPickerModal';
 
 type Mode = 'SALE' | 'RENTAL';
 
@@ -30,6 +31,9 @@ interface Category {
  *
  * Categorias (Alfaiataria, Moda Festa…) logo abaixo: vêm do CRM e cada uma diz
  * se vale para venda, locação ou ambas. "Todas" é o padrão.
+ *
+ * Modal de categorias (2026-11-12): ao tocar em Loja (aba ou atalho do Club)
+ * abrem as 2 fotos de "Mudar Categoria APP" do CRM; tocar numa filtra a vitrine.
  */
 export function ShopScreen() {
   const navigation = useNavigation<never>();
@@ -39,6 +43,47 @@ export function ShopScreen() {
   const [quarterly, setQuarterly] = useState<QuarterlyRental | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [picker, setPicker] = useState<PickerCategory[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const route = useRoute();
+  const lockedRef = useRef(false);
+  lockedRef.current = locked;
+
+  // Fotos do modal: carrega ao entrar e abre na primeira vez.
+  const openPicker = useCallback(async () => {
+    const list = await api.get<PickerCategory[]>('/catalog/category-picker').catch(() => []);
+    setPicker(list);
+    if (list.length > 0 && !lockedRef.current) setPickerOpen(true);
+  }, []);
+
+  useEffect(() => {
+    void openPicker();
+  }, [openPicker]);
+
+  // Tocar na aba Loja de novo abre o modal outra vez.
+  useEffect(
+    () =>
+      (navigation as never as { addListener: (e: string, cb: () => void) => () => void }).addListener(
+        'tabPress',
+        () => void openPicker(),
+      ),
+    [navigation, openPicker],
+  );
+
+  // Atalho "Loja" do Club manda `picker` nos parâmetros para abrir também.
+  const pickerParam = (route.params as { picker?: number } | undefined)?.picker;
+  useEffect(() => {
+    if (pickerParam) void openPicker();
+  }, [pickerParam, openPicker]);
+
+  const pickCategory = (category: PickerCategory) => {
+    setPickerOpen(false);
+    const nextMode: Mode = category.scope === 'BOTH' ? mode : category.scope;
+    if (nextMode === mode && category.id === categoryId) return;
+    setProducts(null);
+    setMode(nextMode);
+    setCategoryId(category.id);
+  };
 
   const visibleCategories = categories.filter((c) => c.scope === 'BOTH' || c.scope === mode);
 
@@ -101,6 +146,12 @@ export function ShopScreen() {
 
   return (
     <Screen scroll={false}>
+      <CategoryPickerModal
+        visible={pickerOpen && !locked && picker.length > 0}
+        categories={picker}
+        onPick={pickCategory}
+        onClose={() => setPickerOpen(false)}
+      />
       <ProductGrid
         products={products}
         mode={mode}

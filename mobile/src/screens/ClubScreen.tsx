@@ -153,7 +153,15 @@ export function ClubScreen({ navigation }: { navigation: { navigate: (screen: st
             subtitle="Ative sua melhor versão"
             onPress={() => navigation.navigate('Looks')}
           />
-          <Shortcut title="Loja" subtitle="Peças da coleção" onPress={() => navigation.navigate('Loja')} />
+          <Shortcut
+            title="Loja"
+            subtitle="Peças da coleção"
+            onPress={() =>
+              (navigation as never as { navigate: (s: string, p: unknown) => void }).navigate('Loja', {
+                picker: Date.now(),
+              })
+            }
+          />
           <Shortcut title="Eventos" subtitle="Confirme sua presença" onPress={() => navigation.navigate('Eventos')} />
           <Shortcut title="Carteira" subtitle="Créditos e recargas" onPress={() => navigation.navigate('Carteira')} />
           <Shortcut
