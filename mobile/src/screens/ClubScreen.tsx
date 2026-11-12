@@ -99,7 +99,10 @@ export function ClubScreen({ navigation }: { navigation: { navigate: (screen: st
               <Text style={styles.amount}>{formatBRL(data.walletBalanceCents)}</Text>
               <Caption>100% da sua mensalidade vira crédito para usar em peças da marca.</Caption>
               {data.nextInvoice ? (
-                <Caption>Renova em {new Date(data.nextInvoice.dueDate).toLocaleDateString('pt-BR')}.</Caption>
+                <Caption>
+                  Plano {data.planName} válido até{' '}
+                  {new Date(data.nextInvoice.dueDate).toLocaleDateString('pt-BR')}.
+                </Caption>
               ) : null}
             </>
           ) : (
@@ -113,7 +116,7 @@ export function ClubScreen({ navigation }: { navigation: { navigate: (screen: st
             style={({ pressed }) => [styles.plansLink, pressed && { opacity: 0.6 }]}
           >
             <Text style={styles.plansLinkText}>
-              {data.isSubscriber ? 'Planos e benefícios ›' : 'Conheça os planos ›'}
+              {data.isSubscriber ? 'Meu plano · trocar ou renovar ›' : 'Assine um plano ›'}
             </Text>
           </Pressable>
 

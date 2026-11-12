@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { api, ApiError } from '../api/client';
+import { api } from '../api/client';
+import { SubscriptionLocked, isSubscriptionRequired } from '../components/SubscriptionLocked';
 import { colors, radius, spacing, typography } from '../theme/theme';
 import { Caption, Loading, Screen } from '../components/ui';
 import { ProductGrid, type ProductSummary, type QuarterlyRental } from '../components/ProductGrid';
@@ -34,6 +35,7 @@ export function ShopScreen() {
   const navigation = useNavigation<never>();
   const [mode, setMode] = useState<Mode>('SALE');
   const [products, setProducts] = useState<ProductSummary[] | null>(null);
+  const [locked, setLocked] = useState(false);
   const [quarterly, setQuarterly] = useState<QuarterlyRental | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -53,18 +55,16 @@ export function ShopScreen() {
         const page = await api.get<{ data: ProductSummary[] }>(`/catalog/shop${query}`);
         setProducts(page.data);
       }
+      setLocked(false);
     } catch (error) {
-      // RN-01 — não assinante é levado ao site externo.
-      if (error instanceof ApiError && error.isSubscriptionRequired) {
-        (navigation as never as { navigate: (s: string, p?: unknown) => void }).navigate(
-          'SubscriptionRequired',
-          { storeUrl: error.storeUrl },
-        );
+      // RN-01 — quem não assina vê o aviso com o caminho para os planos.
+      if (isSubscriptionRequired(error)) {
+        setLocked(true);
         return;
       }
       throw error;
     }
-  }, [navigation, mode, categoryId]);
+  }, [mode, categoryId]);
 
   const switchMode = (next: Mode) => {
     if (next === mode) return;
@@ -96,6 +96,7 @@ export function ShopScreen() {
     }, []),
   );
 
+  if (locked) return <SubscriptionLocked area="a Loja" />;
   if (!products) return <Loading />;
 
   return (

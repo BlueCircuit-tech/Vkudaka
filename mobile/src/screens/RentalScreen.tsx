@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { api } from '../api/client';
+import { SubscriptionLocked, isSubscriptionRequired } from '../components/SubscriptionLocked';
 import { spacing, typography } from '../theme/theme';
 import { Caption, Loading, Screen } from '../components/ui';
 import { ProductGrid, type ProductSummary, type QuarterlyRental } from '../components/ProductGrid';
@@ -20,6 +21,7 @@ export function RentalScreen() {
   const navigation = useNavigation<never>();
   const [products, setProducts] = useState<ProductSummary[] | null>(null);
   const [quarterly, setQuarterly] = useState<QuarterlyRental | null>(null);
+  const [locked, setLocked] = useState(false);
 
   useEffect(() => {
     void api
@@ -27,9 +29,11 @@ export function RentalScreen() {
       .then((page) => {
         setProducts(page.data);
         setQuarterly(page.quarterlyRental);
-      });
+      })
+      .catch((error) => setLocked(isSubscriptionRequired(error)));
   }, []);
 
+  if (locked) return <SubscriptionLocked area="o Aluguel" />;
   if (!products) return <Loading />;
 
   return (

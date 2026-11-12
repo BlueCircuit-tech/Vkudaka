@@ -248,7 +248,7 @@ export function ProfileScreen() {
                 mensalidade vira crédito VKUDAKA na sua carteira.
               </Body>
               <Caption>
-                Renova em{' '}
+                Válido até{' '}
                 {new Date(profile.subscription.currentPeriodEnd).toLocaleDateString('pt-BR')}
               </Caption>
             </>
@@ -256,8 +256,8 @@ export function ProfileScreen() {
             <Body muted>Você ainda não tem assinatura ativa.</Body>
           )}
           <Button
-            title={profile.subscription ? 'Planos e benefícios' : 'Conheça os planos'}
-            variant="quiet"
+            title={profile.subscription ? 'Trocar ou renovar plano' : 'Assinar um plano'}
+            variant={profile.subscription ? 'ghost' : 'primary'}
             onPress={() =>
               (navigation as never as { navigate: (s: string) => void }).navigate('Plans')
             }

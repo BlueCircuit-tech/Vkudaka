@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { api } from '../api/client';
+import { SubscriptionLocked, isSubscriptionRequired } from '../components/SubscriptionLocked';
 import { colors, formatBRL, radius, spacing, typography, fonts } from '../theme/theme';
 import { Body, Button, Caption, Label, Loading, Screen } from '../components/ui';
 import { PurchaseRulesModal } from '../components/PurchaseRulesModal';
@@ -72,9 +73,13 @@ export function ProductDetailScreen() {
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [rulesVisible, setRulesVisible] = useState(false);
+  const [locked, setLocked] = useState(false);
 
   useEffect(() => {
-    void api.get<ProductDetail>(`/catalog/products/${productId}`).then(setProduct);
+    void api
+      .get<ProductDetail>(`/catalog/products/${productId}`)
+      .then(setProduct)
+      .catch((error) => setLocked(isSubscriptionRequired(error)));
   }, [productId]);
 
   const priceCents = mode === 'RENTAL' ? product?.rentalPriceCents : product?.salePriceCents;
@@ -117,6 +122,7 @@ export function ProductDetailScreen() {
     setSelectedVariant(sameSize?.id ?? null);
   };
 
+  if (locked) return <SubscriptionLocked area="as peças da coleção" />;
   if (!product) return <Loading />;
 
   const cover = product.images.find((image) => image.isCover) ?? product.images[0];

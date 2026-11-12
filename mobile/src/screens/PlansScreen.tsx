@@ -51,6 +51,7 @@ interface MyPlan {
   hasPlan: boolean;
   planId?: string;
   planName?: string;
+  priceCents?: number;
   rebatePercent: number;
   renewsAt?: string | null;
   currentPeriodEnd?: string;
@@ -127,10 +128,29 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
     if (!checkoutEnabled) return undefined;
     if (!isSubscriber) return { title: `Assinar Plano ${plan.name}`, primary: true };
     if (me?.planId === plan.id) return { title: 'Renovar mais um período', primary: false };
-    if (plan.priceCents > (catalog.plans.find((p) => p.id === me?.planId)?.priceCents ?? 0)) {
-      return { title: `Fazer upgrade para ${plan.name}`, primary: true };
-    }
-    return undefined;
+    const upgrade = plan.priceCents > (me?.priceCents ?? 0);
+    return {
+      title: upgrade ? `Fazer upgrade para ${plan.name}` : `Trocar para Plano ${plan.name}`,
+      primary: upgrade,
+    };
+  };
+
+  /**
+   * Troca de plano: o atual é encerrado e o novo começa agora — os dias que
+   * faltavam do atual são somados ao período novo (regra do servidor).
+   */
+  const choose = (plan: PublicPlan) => {
+    if (!isSubscriber || me?.planId === plan.id) return void pay(plan);
+    Alert.alert(
+      `Trocar para o Plano ${plan.name}?`,
+      `Você paga ${formatBRL(plan.priceCents)}${INTERVAL_SUFFIX[plan.interval]} e o valor vira crédito na carteira. ` +
+        `O Plano ${me?.planName ?? 'atual'} é encerrado e o ${plan.name} começa assim que o pagamento for aprovado; ` +
+        'os dias que faltavam do seu plano atual são somados ao novo.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Continuar', onPress: () => void pay(plan) },
+      ],
+    );
   };
 
   return (
@@ -147,6 +167,24 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
         </View>
 
         {notice}
+
+        {/* Plano atual de quem já assina — primeira coisa da tela. */}
+        {isSubscriber && me ? (
+          <View style={styles.current}>
+            <Label>Seu plano atual</Label>
+            <Text style={styles.currentName}>Plano {me.planName}</Text>
+            <Caption>
+              {me.currentPeriodEnd ? `Válido até ${formatDate(me.currentPeriodEnd)}` : ''}
+              {me.rebatePercent > 0 ? ` · ${me.rebatePercent}% de desconto fidelidade` : ''}
+            </Caption>
+            {checkoutEnabled ? (
+              <Caption>
+                Para continuar depois dessa data, toque em “Renovar mais um período” no seu plano. Para
+                mudar, escolha outro plano abaixo.
+              </Caption>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Modelo do clube */}
         <View style={styles.hero}>
@@ -170,22 +208,6 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
           ))}
         </View>
 
-        {/* Plano atual de quem já assina */}
-        {isSubscriber && me ? (
-          <View style={styles.current}>
-            <Label>Seu plano</Label>
-            <Text style={styles.currentName}>{me.planName}</Text>
-            <Caption>
-              {me.renewsAt
-                ? `Renova em ${formatDate(me.renewsAt)}`
-                : me.currentPeriodEnd
-                  ? `Válido até ${formatDate(me.currentPeriodEnd)}`
-                  : ''}
-              {me.rebatePercent > 0 ? ` · ${me.rebatePercent}% de desconto fidelidade` : ''}
-            </Caption>
-          </View>
-        ) : null}
-
         {/* Cards dos planos */}
         {catalog.plans.map((plan) => {
           const action = actionFor(plan);
@@ -200,7 +222,7 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
                       ...action,
                       loading: paying === plan.id,
                       disabled: paying !== null,
-                      onPress: () => void pay(plan),
+                      onPress: () => choose(plan),
                     }
                   : undefined
               }
@@ -259,6 +281,10 @@ export function PlansView({ notice }: { notice?: React.ReactNode }) {
           </Caption>
         ) : !isSubscriber ? (
           <Button title="Assinar no site VKUDAKA" onPress={openStore} />
+        ) : checkoutEnabled ? (
+          <Caption>
+            Você está no Plano {me?.planName}. Renove ou troque de plano pelos botões de cada plano.
+          </Caption>
         ) : me?.upgrade ? (
           <>
             <Caption>

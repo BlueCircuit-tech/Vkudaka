@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { api, uploadMedia } from '../api/client';
+import { SubscriptionLocked, isSubscriptionRequired } from '../components/SubscriptionLocked';
 import { useAuth } from '../context/AuthContext';
 import { colors, radius, spacing, typography } from '../theme/theme';
 import { Body, Caption, Label, Loading, Screen } from '../components/ui';
@@ -109,9 +110,18 @@ export function CommunityScreen() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentDraft, setCommentDraft] = useState('');
 
+  const [locked, setLocked] = useState(false);
+
   const load = useCallback(async () => {
-    const page = await api.get<{ data: Post[] }>('/community/feed');
-    setPosts(page.data);
+    try {
+      const page = await api.get<{ data: Post[] }>('/community/feed');
+      setPosts(page.data);
+      setLocked(false);
+    } catch (error) {
+      // RN-01 — comunidade é do clube: quem não assina vê o aviso.
+      if (isSubscriptionRequired(error)) setLocked(true);
+      else throw error;
+    }
   }, []);
 
   useFocusEffect(
@@ -278,6 +288,7 @@ export function CommunityScreen() {
     ]);
   };
 
+  if (locked) return <SubscriptionLocked area="a Comunidade" />;
   if (!posts) return <Loading />;
 
   return (
