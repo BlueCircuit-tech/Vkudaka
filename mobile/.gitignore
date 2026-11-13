@@ -5,3 +5,6 @@ dist/
 *.apk
 *.ipa
 .DS_Store
+
+# Chaves de publicação (Google Play / App Store) — NUNCA versionar: o repositório é público.
+.secrets/
