@@ -5,7 +5,8 @@ import { AppError } from '../../lib/errors.js';
 /**
  * E-mail transacional (2026-11-12) — hoje só o código de "Esqueci a senha".
  *
- * Envia pelo SMTP configurado no ambiente (Gmail da VKUDAKA com senha de app).
+ * Envia pela API do Brevo quando BREVO_API_KEY existe (produção: o Render
+ * gratuito bloqueia SMTP); senão, pelo SMTP do ambiente (Gmail com senha de app).
  * Sem SMTP, só um servidor local (localhost) joga o e-mail no console; em
  * qualquer servidor publicado a falta de configuração é erro — o cliente não
  * pode ficar esperando um código que nunca vai chegar.
@@ -39,7 +40,42 @@ function getTransporter(): Transporter {
   return transporter;
 }
 
+/** Brevo — API transacional por HTTPS (porta 443, liberada no Render gratuito). */
+async function sendWithBrevo(message: MailMessage): Promise<void> {
+  const senderEmail = env.MAIL_SENDER_EMAIL ?? env.SMTP_USER;
+  if (!senderEmail) {
+    throw new AppError(503, 'MAIL_NOT_CONFIGURED', 'Remetente do e-mail não configurado (MAIL_SENDER_EMAIL).');
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': env.BREVO_API_KEY!,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { name: env.MAIL_SENDER_NAME, email: senderEmail },
+        to: [{ email: message.to }],
+        subject: message.subject,
+        htmlContent: message.html,
+        textContent: message.text,
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Brevo HTTP ${response.status}: ${detail.slice(0, 300)}`);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function sendMail(message: MailMessage): Promise<void> {
+  if (env.BREVO_API_KEY) return sendWithBrevo(message);
   if (!configured()) {
     // Só na máquina de quem desenvolve: o Render ainda roda em
     // NODE_ENV=development, e lá o código não pode sumir num log.

@@ -37,6 +37,15 @@ const schema = z.object({
   SMTP_PASS: z.string().optional(),
   /** Remetente exibido. Padrão: "Clube VKUDAKA <SMTP_USER>". */
   MAIL_FROM: z.string().optional(),
+  /**
+   * Brevo (API HTTPS, 2026-11-12): o plano gratuito do Render bloqueia as
+   * portas SMTP, então em produção o e-mail sai pela API do Brevo. Com a
+   * chave preenchida, o Brevo tem prioridade sobre o SMTP.
+   */
+  BREVO_API_KEY: z.string().optional(),
+  /** Remetente (precisa estar verificado no Brevo). Padrão: SMTP_USER. */
+  MAIL_SENDER_EMAIL: z.string().email().optional(),
+  MAIL_SENDER_NAME: z.string().default('Clube VKUDAKA'),
 
   DATABASE_URL: z.string().min(1),
 
