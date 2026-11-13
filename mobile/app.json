@@ -2,7 +2,7 @@
   "expo": {
     "name": "Clube VKUDAKA",
     "slug": "clube-vkudaka",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "vkudaka",
@@ -20,11 +20,11 @@
         "NSCameraUsageDescription": "Para publicar fotos na comunidade.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "4"
+      "buildNumber": "5"
     },
     "android": {
       "package": "com.vkudaka.clube",
-      "versionCode": 10,
+      "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FAF7F3"
