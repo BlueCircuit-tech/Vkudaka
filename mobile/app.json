@@ -2,7 +2,7 @@
   "expo": {
     "name": "Clube VKUDAKA",
     "slug": "clube-vkudaka",
-    "version": "2.0.2",
+    "version": "2.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "vkudaka",
@@ -27,7 +27,7 @@
       "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FAF7F3"
+        "backgroundColor": "#FFFFFF"
       },
       "permissions": [
         "android.permission.CAMERA",
