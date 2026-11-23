@@ -389,6 +389,8 @@ export function createMercadoPagoProvider(config: MercadoPagoConfig): PaymentPro
             date_of_expiration: request.expiresAt.toISOString(),
             payment_methods: {
               excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }],
+              // Teto explícito: sem isso vale o padrão do Mercado Pago, que varia.
+              installments: 12,
             },
             statement_descriptor: 'VKUDAKA',
           },
